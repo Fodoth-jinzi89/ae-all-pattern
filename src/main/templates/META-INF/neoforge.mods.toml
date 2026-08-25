@@ -1,0 +1,57 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+issueTrackerURL="https://github.com/LangQi99/ae-all-pattern/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+displayURL="https://github.com/LangQi99/ae-all-pattern"
+authors="${mod_authors}"
+credits="${mod_credits}"
+description='''
+Documentation-first development prototype. Binding and virtual-pattern execution are not implemented yet.
+
+The planned feature binds an AE network to a machine and exposes the machine's safely automatable recipes as virtual processing patterns.
+
+当前为文档先行的开发原型，绑定和虚拟样板执行尚未实现。计划中的功能是连接 AE 网络与目标机器，把可安全自动化的配方作为虚拟处理样板提供给 AE。
+'''
+
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version},)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="ae2"
+type="required"
+reason="AE All Pattern publishes virtual processing patterns to an AE network."
+versionRange="${ae2_version_range}"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="mekanism"
+type="optional"
+reason="Enables Mekanism machine adapters."
+versionRange="${mekanism_version_range}"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="jei"
+type="optional"
+reason="Displays discovered virtual patterns and binding information."
+versionRange="[19.19,20)"
+ordering="AFTER"
+side="CLIENT"
