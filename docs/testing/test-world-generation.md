@@ -39,7 +39,9 @@
 
 ## 本仓库工具
 
-`tools/testworld/generate.py` 当前只生成并校验“测试场计划”，不会修改 region。真正的世界写入器要等链接器/绑定数据格式稳定后实现，并遵守以上流程。
+`build.gradle` 的 `generateGameTestTemplate` 会生成合法的空结构 NBT，四个核心 GameTest 在游戏内放置链接器、熔炉和可选 Mekanism 机器。`tools/testworld/generate.py` 生成更大人工测试场的确定性清单。`tools/testworld/build_lab_staging.py` 只为一个全新目录生成数据包、说明和压力配方；随后必须由 Minecraft 加载世界并执行 `function aeallpattern_test:build`，region、level NBT 和方块实体始终由游戏写入。脚本发现目标目录已存在时会拒绝运行。
+
+完整存档的验收流程是：启动服务端、确认 5658 个配方加载、执行建场函数、按坐标断言关键方块、`save-all flush`、正常停服、重启后再次断言，最后停服并打包。若未来确需离线写世界，仍必须遵守以上安全流程。
 
 ## 不提交存档
 

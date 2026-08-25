@@ -11,7 +11,7 @@
 - 目录 diff、缓存代数和 LRU 淘汰。
 - 绑定状态机与权限决策。
 - 输入所有权转入持久 IncomingBuffer 的全有或全无，以及转运失败不丢物。
-- ReturnBuffer 网络满时不丢物。
+- 解绑与拆除时 IncomingBuffer 可恢复尚未转运的物品。
 
 复杂规则应拆到不依赖 BlockEntity 的小类中，避免每次验证都启动游戏。
 
@@ -43,7 +43,7 @@
 ./gradlew clean test check build
 ```
 
-GameTest 稳定后加入独立 job。性能基准不必阻断每个提交，但发布前必须运行并保存结果。
+CI 以 `minimal`（无 JEI/Mekanism）和 `full`（JEI + Mekanism）两个独立 GameTest job 运行；10000 指纹规模门禁随单元测试执行。
 
 ## 回归测试原则
 

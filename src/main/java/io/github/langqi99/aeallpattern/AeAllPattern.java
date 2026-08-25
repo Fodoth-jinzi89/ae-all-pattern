@@ -1,10 +1,22 @@
 package io.github.langqi99.aeallpattern;
 
 import com.mojang.logging.LogUtils;
+import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
+import io.github.langqi99.aeallpattern.registry.ModBlocks;
+import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
+import io.github.langqi99.aeallpattern.recipe.RecipeIndexService;
+import io.github.langqi99.aeallpattern.network.BindingNetwork;
+import io.github.langqi99.aeallpattern.network.BindingSyncService;
+import io.github.langqi99.aeallpattern.client.ClientEvents;
+import io.github.langqi99.aeallpattern.diagnostics.ModCommands;
+import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import org.slf4j.Logger;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLEnvironment;
 
 @Mod(AeAllPattern.MOD_ID)
 public final class AeAllPattern {
@@ -12,7 +24,20 @@ public final class AeAllPattern {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public AeAllPattern(IEventBus modBus) {
+        ModBlocks.register(modBus);
+        ModBlockEntities.register(modBus);
+        ModDataComponents.register(modBus);
         ModItems.register(modBus);
-        LOGGER.info("AE All Pattern initialized (documentation-first prototype)");
+        MachineAdapterRegistry.initialize();
+        modBus.addListener(ModBlockEntities::registerCapabilities);
+        modBus.addListener(BindingNetwork::register);
+        NeoForge.EVENT_BUS.addListener(RecipeIndexService::addReloadListener);
+        NeoForge.EVENT_BUS.addListener(BindingSyncService::onPlayerLoggedIn);
+        NeoForge.EVENT_BUS.addListener(BindingSyncService::onPlayerChangedDimension);
+        NeoForge.EVENT_BUS.addListener(ModCommands::register);
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            ClientEvents.register();
+        }
+        LOGGER.info("AE All Pattern initialized");
     }
 }

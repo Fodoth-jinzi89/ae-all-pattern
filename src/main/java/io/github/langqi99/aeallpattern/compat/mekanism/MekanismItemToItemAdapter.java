@@ -1,0 +1,287 @@
+package io.github.langqi99.aeallpattern.compat.mekanism;
+
+import appeng.api.stacks.AEItemKey;
+import io.github.langqi99.aeallpattern.binding.BindingRecord;
+import io.github.langqi99.aeallpattern.machine.MachineAdapter;
+import io.github.langqi99.aeallpattern.machine.ItemHandlerTransfer;
+import io.github.langqi99.aeallpattern.recipe.RecipeCatalog;
+import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
+import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Supplier;
+import mekanism.api.Action;
+import mekanism.api.AutomationType;
+import mekanism.api.inventory.IMekanismInventory;
+import mekanism.api.inventory.IInventorySlot;
+import mekanism.api.recipes.ItemStackToItemStackRecipe;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.crafting.SingleRecipeInput;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.capabilities.Capabilities;
+
+/** Deterministic Mekanism one-item-input adapter using public recipe and capability APIs. */
+final class MekanismItemToItemAdapter implements MachineAdapter {
+    private static final int MAX_INGREDIENT_VARIANTS = 64;
+    private static final int MAX_PATTERNS = 4096;
+    private final ResourceLocation id;
+    private final Supplier<RecipeType<ItemStackToItemStackRecipe>> recipeType;
+    private final boolean vanillaSmelting;
+    private final String singleMachinePath;
+    private final String factorySuffix;
+
+    MekanismItemToItemAdapter(
+            String idPath,
+            Supplier<RecipeType<ItemStackToItemStackRecipe>> recipeType,
+            String singleMachinePath,
+            String factorySuffix) {
+        this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
+        this.recipeType = recipeType;
+        this.vanillaSmelting = false;
+        this.singleMachinePath = singleMachinePath;
+        this.factorySuffix = factorySuffix;
+    }
+
+    MekanismItemToItemAdapter(String idPath, String singleMachinePath, String factorySuffix) {
+        this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
+        this.recipeType = null;
+        this.vanillaSmelting = true;
+        this.singleMachinePath = singleMachinePath;
+        this.factorySuffix = factorySuffix;
+    }
+
+    @Override
+    public ResourceLocation id() {
+        return id;
+    }
+
+    @Override
+    public int schemaVersion() {
+        return 1;
+    }
+
+    @Override
+    public boolean supports(ServerLevel level, BlockEntity target) {
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(target.getBlockState().getBlock());
+        return blockId.getNamespace().equals("mekanism")
+                && (blockId.getPath().equals(singleMachinePath) || blockId.getPath().endsWith("_" + factorySuffix));
+    }
+
+    @Override
+    public RecipeCatalog discoverRecipes(ServerLevel level, BlockEntity target, long generation) {
+        if (vanillaSmelting) {
+            return discoverVanillaSmelting(level, generation);
+        }
+        List<RecipeSnapshot> snapshots = new ArrayList<>();
+        Set<List<String>> seen = new HashSet<>();
+        int filtered = 0;
+        List<RecipeHolder<ItemStackToItemStackRecipe>> holders = new ArrayList<>(
+                level.getRecipeManager().getAllRecipesFor(recipeType.get()));
+        holders.sort(Comparator.comparing(holder -> holder.id().toString()));
+        for (RecipeHolder<ItemStackToItemStackRecipe> holder : holders) {
+            List<ItemStack> variants = holder.value().getInput().getRepresentations().stream()
+                    .sorted(Comparator.comparing(MekanismItemToItemAdapter::normalize))
+                    .toList();
+            if (variants.isEmpty() || variants.size() > MAX_INGREDIENT_VARIANTS) {
+                filtered++;
+                continue;
+            }
+            for (ItemStack representation : variants) {
+                if (snapshots.size() >= MAX_PATTERNS) {
+                    filtered++;
+                    break;
+                }
+                long needed = holder.value().getInput().getNeededAmount(representation);
+                if (needed < 1 || needed > representation.getMaxStackSize() || needed > Integer.MAX_VALUE) {
+                    filtered++;
+                    continue;
+                }
+                ItemStack input = representation.copyWithCount((int) needed);
+                ItemStack output = holder.value().getOutput(input).copy();
+                if (output.isEmpty()) {
+                    filtered++;
+                    continue;
+                }
+                String normalizedInput = normalize(input);
+                String normalizedOutput = normalize(output);
+                if (AEItemKey.of(input).equals(AEItemKey.of(output))
+                        || !seen.add(List.of(normalizedInput, normalizedOutput))) {
+                    filtered++;
+                    continue;
+                }
+                RecipeFingerprint fingerprint = new RecipeFingerprint(
+                        id.toString(), holder.id().toString(), normalizedInput, normalizedOutput, schemaVersion());
+                snapshots.add(new RecipeSnapshot(holder.id(), input, output, fingerprint, 200));
+            }
+        }
+        snapshots.sort(Comparator.comparing(snapshot -> snapshot.fingerprint().stableKey()));
+        return new RecipeCatalog(generation, snapshots, filtered);
+    }
+
+    private RecipeCatalog discoverVanillaSmelting(ServerLevel level, long generation) {
+        List<RecipeSnapshot> snapshots = new ArrayList<>();
+        Set<List<String>> seen = new HashSet<>();
+        int filtered = 0;
+        var holders = new ArrayList<>(level.getRecipeManager().getAllRecipesFor(RecipeType.SMELTING));
+        holders.sort(Comparator.comparing(holder -> holder.id().toString()));
+        for (RecipeHolder<net.minecraft.world.item.crafting.SmeltingRecipe> holder : holders) {
+            List<ItemStack> variants = java.util.Arrays.stream(
+                            holder.value().getIngredients().getFirst().getItems())
+                    .sorted(Comparator.comparing(MekanismItemToItemAdapter::normalize))
+                    .toList();
+            if (variants.isEmpty() || variants.size() > MAX_INGREDIENT_VARIANTS) {
+                filtered++;
+                continue;
+            }
+            for (ItemStack variant : variants) {
+                if (snapshots.size() >= MAX_PATTERNS) {
+                    filtered++;
+                    break;
+                }
+                ItemStack input = variant.copyWithCount(Math.max(1, variant.getCount()));
+                ItemStack output = holder.value()
+                        .assemble(new SingleRecipeInput(input), level.registryAccess())
+                        .copy();
+                if (output.isEmpty()) {
+                    filtered++;
+                    continue;
+                }
+                String normalizedInput = normalize(input);
+                String normalizedOutput = normalize(output);
+                if (AEItemKey.of(input).equals(AEItemKey.of(output))
+                        || !seen.add(List.of(normalizedInput, normalizedOutput))) {
+                    filtered++;
+                    continue;
+                }
+                RecipeFingerprint fingerprint = new RecipeFingerprint(
+                        id.toString(), holder.id().toString(), normalizedInput, normalizedOutput, schemaVersion());
+                snapshots.add(new RecipeSnapshot(
+                        holder.id(), input, output, fingerprint, holder.value().getCookingTime()));
+            }
+        }
+        snapshots.sort(Comparator.comparing(snapshot -> snapshot.fingerprint().stableKey()));
+        return new RecipeCatalog(generation, snapshots, filtered);
+    }
+
+    @Override
+    public boolean insert(ServerLevel level, BindingRecord binding, ItemStack stack) {
+        for (Direction side : preferredFirst(binding.clickedSide())) {
+            var handler = level.getCapability(
+                    Capabilities.ItemHandler.BLOCK, binding.target().pos(), side);
+            if (ItemHandlerTransfer.insertFully(handler, stack)) {
+                return true;
+            }
+        }
+        // Setblock-created machines and some packs intentionally expose no configured side.
+        // Mekanism's unsided automation handler still enforces per-slot insertion rules.
+        if (ItemHandlerTransfer.insertFully(level.getCapability(
+                Capabilities.ItemHandler.BLOCK, binding.target().pos(), null), stack)) {
+            return true;
+        }
+        return forceInsertIntoMekanismInput(level, binding, stack);
+    }
+
+    @Override
+    public ItemStack extractAnyOutput(
+            ServerLevel level, BindingRecord binding, boolean simulate) {
+        for (Direction side : preferredFirst(binding.clickedSide())) {
+            var handler = level.getCapability(
+                    Capabilities.ItemHandler.BLOCK, binding.target().pos(), side);
+            ItemStack extracted = ItemHandlerTransfer.extractAny(handler, simulate);
+            if (!extracted.isEmpty()) {
+                return extracted;
+            }
+        }
+        // The unsided handler keeps input slots non-extractable and exposes completed outputs.
+        ItemStack extracted = ItemHandlerTransfer.extractAny(level.getCapability(
+                Capabilities.ItemHandler.BLOCK, binding.target().pos(), null), simulate);
+        if (!extracted.isEmpty()) {
+            return extracted;
+        }
+        return forceExtractMekanismOutput(level, binding, simulate);
+    }
+
+    /**
+     * Deliberately bypasses Mekanism's side configuration while retaining the machine's own
+     * input-slot recipe validation. This is the Linker's "force input" contract.
+     */
+    private static boolean forceInsertIntoMekanismInput(
+            ServerLevel level, BindingRecord binding, ItemStack stack) {
+        BlockEntity target = level.getBlockEntity(binding.target().pos());
+        if (!(target instanceof IMekanismInventory inventory)) {
+            return false;
+        }
+        ItemStack simulatedRemainder = insertIntoInputSlots(
+                inventory, stack.copy(), Action.SIMULATE);
+        if (!simulatedRemainder.isEmpty()) {
+            return false;
+        }
+        return insertIntoInputSlots(inventory, stack.copy(), Action.EXECUTE).isEmpty();
+    }
+
+    private static ItemStack insertIntoInputSlots(
+            IMekanismInventory inventory, ItemStack stack, Action action) {
+        ItemStack remainder = stack;
+        for (IInventorySlot slot : inventory.getInventorySlots(null)) {
+            if (remainder.isEmpty()) {
+                break;
+            }
+            if (isSlotType(slot, "mekanism.common.inventory.slot.InputInventorySlot")) {
+                remainder = slot.insertItem(remainder, action, AutomationType.MANUAL);
+            }
+        }
+        return remainder;
+    }
+
+    /** Drains only real Mekanism output slots, independent of configured output faces. */
+    private static ItemStack forceExtractMekanismOutput(
+            ServerLevel level, BindingRecord binding, boolean simulate) {
+        BlockEntity target = level.getBlockEntity(binding.target().pos());
+        if (!(target instanceof IMekanismInventory inventory)) {
+            return ItemStack.EMPTY;
+        }
+        for (IInventorySlot slot : inventory.getInventorySlots(null)) {
+            if (isSlotType(slot, "mekanism.common.inventory.slot.OutputInventorySlot") && !slot.isEmpty()) {
+                ItemStack extracted = slot.extractItem(
+                        slot.getCount(), simulate ? Action.SIMULATE : Action.EXECUTE, AutomationType.MANUAL);
+                if (!extracted.isEmpty()) {
+                    return extracted;
+                }
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static boolean isSlotType(IInventorySlot slot, String className) {
+        for (Class<?> type = slot.getClass(); type != null; type = type.getSuperclass()) {
+            if (type.getName().equals(className)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<Direction> preferredFirst(Direction preferred) {
+        List<Direction> directions = new ArrayList<>(Direction.values().length);
+        directions.add(preferred);
+        for (Direction side : Direction.values()) {
+            if (side != preferred) {
+                directions.add(side);
+            }
+        }
+        return directions;
+    }
+
+    private static String normalize(ItemStack stack) {
+        return AEItemKey.of(stack) + "*" + stack.getCount();
+    }
+}

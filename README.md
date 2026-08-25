@@ -6,7 +6,7 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 
 ## 当前状态
 
-仓库目前是**文档先行、可编译的开发骨架**：已固定技术路线、依赖、目录、测试与发布流程，并注册了绑定器占位物品；绑定、虚拟样板发布和机器适配器还未实现。这样可以先把服务端权威、AE2 生命周期、安全与性能边界定清楚，再开始功能代码，避免做出只在单机 JEI 环境可用的版本。
+**0.1.0 MVP 已完成。** 链接器是占用一个频道、消耗 2 AE/t 的真实 AE 节点；绑定器、世界持久化、紫色包围框、虚拟处理样板、安全输入缓冲、诊断命令和可选 Mekanism/JEI 集成都已实现。自动化测试同时覆盖只有 AE2 的最小专服和安装 JEI + Mekanism 的完整环境。
 
 ## 目标交互
 
@@ -16,7 +16,7 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 4. 客户端为目标机器显示紫色 AE 风格包围框。
 5. 服务端从 `RecipeManager` 和机器公开 API 建立配方目录。
 6. 链接器通过 AE2 `ICraftingProvider` 发布虚拟处理样板。
-7. AE 发起合成时，链接器先持久接管完整输入，再由适配器安全转运并追踪预期输出。
+7. AE 发起合成时，链接器先持久接管完整输入，再由适配器跨面安全转运；绑定机器所有可抽取输出自动回到同一 ME 网络。
 
 ## 核心原则
 
@@ -31,23 +31,33 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 
 | 组件 | 基线 |
 | --- | --- |
+| AE All Pattern | 0.1.0 |
 | Minecraft | 1.21.1 |
 | 加载器 | NeoForge 21.1.219+ |
 | Java | 21 |
 | Applied Energistics 2 | 19.2.17 |
-| JEI | 可选，仅客户端展示与调试 |
-| Mekanism | 可选，第一批机器适配目标 |
+| JEI | 可选，绑定器/链接器使用说明 |
+| Mekanism | 可选，冶炼、粉碎、富集机器与工厂 |
+
+## 已支持机器
+
+- 原版熔炉、高炉、烟熏炉；燃料由机器自身或外部物流供应。
+- Mekanism 充能冶炼炉及冶炼工厂。
+- Mekanism 粉碎机/粉碎工厂、富集仓/富集工厂。
+
+绑定时点击的面就是投料能力面。机器产物仍遵循 AE2 原生处理样板语义，需要由导入总线、管道或其他物流返回 AE 网络。
 
 ## 开发
 
 ```bash
 ./gradlew test
+./gradlew runGameTestServer
 ./gradlew runClient
 ./gradlew runServer
 ./gradlew clean check build
 ```
 
-完整说明从 [文档索引](docs/index.md) 开始；[当前支持矩阵](docs/product/support-matrix.md) 区分已实现、计划中与暂不支持，第一阶段任务见 [实施路线图](docs/roadmap.md)。
+完整说明从 [文档索引](docs/index.md) 开始；[当前支持矩阵](docs/product/support-matrix.md) 和 [已知限制](docs/product/limitations.md) 描述 0.1.0 的准确边界，后续计划见 [实施路线图](docs/roadmap.md)。
 
 ## 许可证
 

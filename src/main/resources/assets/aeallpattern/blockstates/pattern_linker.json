@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "aeallpattern:block/pattern_linker"
+    }
+  }
+}

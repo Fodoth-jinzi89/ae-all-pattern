@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "tools",
+  "key": {
+    "P": {
+      "item": "ae2:blank_pattern"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    }
+  },
+  "pattern": [
+    " P ",
+    " S ",
+    " S "
+  ],
+  "result": {
+    "count": 1,
+    "id": "aeallpattern:pattern_binder"
+  }
+}

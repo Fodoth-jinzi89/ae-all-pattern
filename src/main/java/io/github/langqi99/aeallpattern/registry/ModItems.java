@@ -5,6 +5,7 @@ import io.github.langqi99.aeallpattern.binding.PatternBinderItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -18,12 +19,17 @@ public final class ModItems {
 
     public static final DeferredItem<PatternBinderItem> PATTERN_BINDER = ITEMS.registerItem(
             "pattern_binder", PatternBinderItem::new, new Item.Properties().stacksTo(1));
+    public static final DeferredItem<BlockItem> PATTERN_LINKER = ITEMS.registerSimpleBlockItem(
+            "pattern_linker", ModBlocks.PATTERN_LINKER, new Item.Properties());
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MAIN_TAB = TABS.register("main", () ->
             CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.aeallpattern"))
                     .icon(() -> PATTERN_BINDER.get().getDefaultInstance())
-                    .displayItems((parameters, output) -> output.accept(PATTERN_BINDER.get()))
+                    .displayItems((parameters, output) -> {
+                        output.accept(PATTERN_BINDER.get());
+                        output.accept(PATTERN_LINKER.get());
+                    })
                     .build());
 
     private ModItems() {

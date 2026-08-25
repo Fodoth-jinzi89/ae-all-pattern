@@ -9,7 +9,7 @@ version = mod_version
 group = mod_group_id
 
 base {
-    archivesName = mod_id
+    archivesName = "${mod_id}-${minecraft_version}-neoforge"
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -66,7 +66,29 @@ neoForge {
 
 sourceSets.main.resources {
     srcDir('src/generated/resources')
+    srcDir(layout.buildDirectory.dir('generated/resources/gameTest'))
 }
+
+def generateGameTestTemplate = tasks.register('generateGameTestTemplate') {
+    def outputFile = layout.buildDirectory.file(
+            'generated/resources/gameTest/data/aeallpattern/structure/empty.nbt')
+    outputs.file(outputFile)
+    doLast {
+        def encoded = 'H4sIAAAAAAAA/2WPwU4DMQxEB7Yt2VSo3PgXzpwRJ64r79YtLtk4SixV8PUkKmUPteSDPfZongd6rIr8cAeg9d21eziOJiZc0KrHZgw6fRXfVI8ujuawPUikMBQjYzzOEnnKdLAXkuywijQznpftrOMwaayjadOTasBu0XlO9u2wPqlEg8saAo2BHe5lj6fl7iTHQmeHjVE+st1Y1LBd0nJl+q8O60vSC9BDosBm/Efk37Mmzo24gmmWyk8mGuH3eo5D1GyfqLHfGtZNnOq+fSWjD86lPWFX8AuuiQ4xYAEAAA=='
+        def target = outputFile.get().asFile
+        target.parentFile.mkdirs()
+        target.bytes = Base64.decoder.decode(encoded)
+    }
+}
+
+tasks.named('processResources').configure {
+    dependsOn(generateGameTestTemplate)
+}
+
+// ModDev keeps the Minecraft/NeoForge classpath scoped to the main source set.
+// Persistence codec tests need the same mapped classes without launching a game.
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+sourceSets.test.runtimeClasspath += sourceSets.main.runtimeClasspath
 
 configurations {
     runtimeClasspath.extendsFrom localRuntime
@@ -140,6 +162,65 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
 
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
+
+def releaseVersion = providers.gradleProperty('mod_version')
+def generatedMetadataFile = layout.buildDirectory.file(
+        'generated/sources/modMetadata/META-INF/neoforge.mods.toml')
+def readmeFile = layout.projectDirectory.file('README.md')
+
+def verifyReleaseMetadata = tasks.register('verifyReleaseMetadata') {
+    dependsOn(generateModMetadata)
+    inputs.property('releaseVersion', releaseVersion)
+    inputs.file('gradle.properties')
+    inputs.file(readmeFile)
+    inputs.file('src/main/templates/META-INF/neoforge.mods.toml')
+    doLast {
+        def expectedVersion = releaseVersion.get()
+        if (expectedVersion.endsWith('-dev')) {
+            throw new GradleException('Release version must not use the -dev suffix')
+        }
+        def metadata = generatedMetadataFile.get().asFile.text
+        if (!metadata.contains("version=\"${expectedVersion}\"")) {
+            throw new GradleException('Generated mod metadata does not match the project version')
+        }
+        if (!readmeFile.asFile.text.contains(expectedVersion)) {
+            throw new GradleException('README compatibility table must contain the release version')
+        }
+    }
+}
+
+def releaseJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+def verifyReleaseJar = tasks.register('verifyReleaseJar') {
+    dependsOn(tasks.named('jar'))
+    inputs.file(releaseJar)
+    doLast {
+        def archive = releaseJar.get().asFile
+        def zip = new java.util.zip.ZipFile(archive)
+        try {
+            def names = zip.entries().collect { it.name } as Set
+            for (required in [
+                    'META-INF/neoforge.mods.toml',
+                    'META-INF/LICENSE',
+                    'META-INF/NOTICE.md',
+                    'icon.png',
+                    'assets/aeallpattern/textures/item/pattern_binder.png',
+                    'assets/aeallpattern/textures/block/pattern_linker.png']) {
+                if (!names.contains(required)) {
+                    throw new GradleException("Release JAR is missing ${required}")
+                }
+            }
+            if (names.any { it.startsWith('appeng/') || it.startsWith('mekanism/') || it.startsWith('mezz/jei/') }) {
+                throw new GradleException('Release JAR unexpectedly contains upstream classes')
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn(verifyReleaseMetadata, verifyReleaseJar)
+}
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'

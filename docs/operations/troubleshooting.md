@@ -8,7 +8,7 @@
 2. 目标区块是否加载、方块实体是否仍与指纹一致。
 3. 是否命中机器适配器，适配器扫描到多少条/过滤多少条。
 4. RecipeManager 代数是否在 `/reload` 后更新。
-5. 是否达到每绑定样板上限或过滤配置。
+5. 是否达到 4096 样板或 64 ingredient 变体硬上限。
 6. 是否调用 `ICraftingProvider.requestUpdate`。
 
 ## JEI 有配方但 AE 没有
@@ -35,4 +35,4 @@
 
 ## 性能高
 
-使用 `/aeallpattern perf`（实现后）和 spark：比较绑定数量、配方总数、目录重建次数、输入缓存命中和每 tick 扫描。若空闲机器仍反复访问 RecipeManager，先修生命周期，不用单纯增加缓存掩盖。
+使用 `/aeallpattern perf` 和 spark：比较绑定数量、配方总数、目录重建次数、provider 刷新和 push 接受/拒绝数。若空闲机器仍反复访问 RecipeManager，先修生命周期，不用单纯增加缓存掩盖。

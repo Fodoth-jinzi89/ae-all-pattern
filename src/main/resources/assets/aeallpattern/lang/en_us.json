@@ -1,4 +1,22 @@
 {
   "item.aeallpattern.pattern_binder": "All Pattern Binder",
-  "itemGroup.aeallpattern": "AE All Pattern"
+  "block.aeallpattern.pattern_linker": "All Pattern Linker",
+  "tooltip.aeallpattern.pattern_binder.unbound": "Right-click an All Pattern Linker to select it",
+  "tooltip.aeallpattern.pattern_binder.selected": "Selected: %s [%s, %s, %s]",
+  "message.aeallpattern.binding.anchor_selected": "Selected linker at %s, %s, %s",
+  "message.aeallpattern.binding.created": "Bound machine at %s, %s, %s",
+  "message.aeallpattern.binding.removed": "Binding removed",
+  "message.aeallpattern.binding.missing_selection": "Select an All Pattern Linker first",
+  "message.aeallpattern.binding.unsupported_schema": "This binder selection uses an unsupported data version",
+  "message.aeallpattern.binding.wrong_owner": "You do not own this linker or selection",
+  "message.aeallpattern.binding.wrong_dimension": "The linker and machine must be in the same dimension",
+  "message.aeallpattern.binding.too_far": "The linker is too far away (maximum 64 blocks)",
+  "message.aeallpattern.binding.anchor_unloaded": "The linker chunk is not loaded",
+  "message.aeallpattern.binding.anchor_changed": "The selected linker has changed or was removed",
+  "message.aeallpattern.binding.anchor_offline": "The linker needs AE power and a channel",
+  "message.aeallpattern.binding.unsupported_target": "This machine has no supported deterministic recipe adapter",
+  "message.aeallpattern.binding.target_occupied": "This machine is already bound to another linker or player",
+  "itemGroup.aeallpattern": "AE All Pattern",
+  "jei.aeallpattern.pattern_binder.info": "Right-click a Pattern Linker, then sneak-right-click a supported machine. The server publishes that machine's deterministic recipes directly to the connected AE2 network.",
+  "jei.aeallpattern.pattern_linker.info": "Consumes one AE2 channel and 2 AE/t. Virtual processing patterns are visible in AE2 crafting terminals; machine output must have a route back into the network."
 }

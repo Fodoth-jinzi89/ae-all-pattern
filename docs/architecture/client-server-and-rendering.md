@@ -8,7 +8,7 @@
 - 显示绑定器提示与诊断 HUD；
 - 可选 JEI 展示。
 
-客户端类放在 `client` 或 `compat.jei`，通过 client-only mod 入口注册。服务端公共类不能 import 渲染、JEI 或客户端事件。
+客户端类放在 `client` 或 `compat.jei`；渲染事件只在物理客户端条件注册，JEI 插件只在 JEI 客户端生命周期加载。服务端核心签名不引用渲染或可选模组类型。
 
 ## 包围框实现
 

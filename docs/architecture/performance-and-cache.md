@@ -11,38 +11,34 @@
 
 1. `RecipeManager -> SharedRecipeIndex`：世界生命周期弱引用或显式卸载清理。
 2. `Adapter + machine type -> RecipeCatalog`：不可变、按代数替换。
-3. `Binding -> filtered fingerprints`：只保存稳定键和过滤配置。
-4. `input signature -> candidate patterns`：有界 LRU，用于投料快速定位。
+3. `Binding -> immutable virtual pattern list`：由稳定指纹构建，在绑定或配方代数变化时替换。
 
-缓存必须有大小上限、命中/未命中统计和明确失效条件。不能把 Level、BlockEntity 或 Grid 放进进程级强引用 Map。
+目录有 4096 硬上限、重建计数和明确失效条件。进程级缓存用 `RecipeManager` 弱键，值中不保存 Level、BlockEntity 或 Grid。
 
 ## 重载
 
 - 玩家加入不清缓存。
 - 数据包/KubeJS 真正重载时产生新代数。
 - 先在服务端建立新不可变目录，再原子替换，避免 AE 读取半成品。
-- 使用指纹 diff，只刷新受影响链接器。
-- 大型整合包可分 tick 预热，但在目录完成前链接器报告“索引中”，不发布不完整结果。
+- 使用指纹 diff，仅在可见样板集合变化时通知 AE。
+- 0.1.0 同步重建目录；大型整合包可在后续版本增加分 tick 预热。
 
 ## 预算和保护
 
-- 每绑定默认最多公开 4096 张样板，可配置但有硬安全上限。
-- 适配器反射深度不超过 64，候选类型数和扫描时间均有限制。
-- 单 tick 刷新节点数量受预算控制。
-- 连续失败的绑定指数退避，避免每 tick 重试不存在机器。
+- 每个适配器目录最多公开 4096 张样板，单个 ingredient 最多展开 64 个变体。
+- 适配器不做反射扫描。
+- 空闲 tick 不访问 RecipeManager 或重建虚拟样板；只处理小型持久输入队列和节点可用性变化。
 
 ## 诊断
 
-建议命令 `/aeallpattern perf` 输出：
+命令 `/aeallpattern perf` 输出：
 
 ```text
 recipe generation, total/accepted/filtered
 adapter scan milliseconds
 catalog rebuild count and diff size
 AE refresh count
-input cache hit/miss/eviction
-active/offline/invalid bindings
-pushPattern accepted/rejected by reason
+pushPattern accepted/rejected
 ```
 
 单元测试验证缓存淘汰和代数失效；spark 等采样工具只用于集成验证，不替代指标。

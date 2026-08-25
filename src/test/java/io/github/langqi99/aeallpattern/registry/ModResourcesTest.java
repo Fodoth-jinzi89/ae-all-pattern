@@ -1,0 +1,63 @@
+package io.github.langqi99.aeallpattern.registry;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import com.google.gson.JsonParser;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import javax.imageio.ImageIO;
+import org.junit.jupiter.api.Test;
+
+class ModResourcesTest {
+    private static final Path RESOURCES = Path.of("src/main/resources");
+
+    @Test
+    void linkerHasTheCompleteBlockResourceChain() {
+        for (String relative : List.of(
+                "assets/aeallpattern/blockstates/pattern_linker.json",
+                "assets/aeallpattern/models/block/pattern_linker.json",
+                "assets/aeallpattern/models/item/pattern_linker.json",
+                "data/aeallpattern/loot_table/blocks/pattern_linker.json",
+                "data/aeallpattern/tags/block/mineable/pickaxe.json",
+                "data/aeallpattern/recipe/pattern_linker.json")) {
+            assertTrue(Files.isRegularFile(RESOURCES.resolve(relative)), () -> "missing resource: " + relative);
+        }
+    }
+
+    @Test
+    void allOwnedJsonResourcesParse() throws IOException {
+        try (var paths = Files.walk(RESOURCES)) {
+            for (Path path : paths.filter(file -> file.toString().endsWith(".json")).toList()) {
+                try (var reader = Files.newBufferedReader(path)) {
+                    JsonParser.parseReader(reader);
+                }
+            }
+        }
+    }
+
+    @Test
+    void ownedPixelArtTexturesAreValidMinecraftSprites() throws IOException {
+        for (String relative : List.of(
+                "assets/aeallpattern/textures/block/pattern_linker.png",
+                "assets/aeallpattern/textures/item/pattern_binder.png")) {
+            Path path = RESOURCES.resolve(relative);
+            assertTrue(Files.isRegularFile(path), () -> "missing texture: " + relative);
+            BufferedImage image = ImageIO.read(path.toFile());
+            assertEquals(16, image.getWidth(), () -> "unexpected texture width: " + relative);
+            assertEquals(16, image.getHeight(), () -> "unexpected texture height: " + relative);
+            assertTrue(image.getColorModel().hasAlpha(), () -> "texture must retain an alpha channel: " + relative);
+        }
+    }
+
+    @Test
+    void modIconIsBundledAtDisplayResolution() throws IOException {
+        BufferedImage icon = ImageIO.read(RESOURCES.resolve("icon.png").toFile());
+        assertEquals(128, icon.getWidth());
+        assertEquals(128, icon.getHeight());
+        assertTrue(icon.getColorModel().hasAlpha());
+    }
+}
