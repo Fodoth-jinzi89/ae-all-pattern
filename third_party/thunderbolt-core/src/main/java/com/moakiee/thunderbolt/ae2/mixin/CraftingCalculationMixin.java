@@ -18,6 +18,7 @@ import com.moakiee.thunderbolt.CoreConfig;
 import com.moakiee.thunderbolt.ae2.crafting.FastCraftingControl;
 import com.moakiee.thunderbolt.ae2.crafting.FastCraftingPlanner;
 import com.moakiee.thunderbolt.ae2.crafting.FastPlanningWatchdog;
+import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
 
 /**
  * Installs the linear-time autocrafting fast path inside AE2's per-amount attempt
@@ -59,6 +60,9 @@ public abstract class CraftingCalculationMixin implements FastCraftingControl {
     @Unique
     private boolean ae2lt$fastPlanningEnabled;
 
+    @Unique
+    private CraftingRoutePolicy ae2lt$routePolicy = CraftingRoutePolicy.DEFAULT;
+
     @Override
     public void ae2lt$setFastPlanningEnabled(boolean enabled) {
         this.ae2lt$fastPlanningInitialized = true;
@@ -68,6 +72,16 @@ public abstract class CraftingCalculationMixin implements FastCraftingControl {
     @Override
     public boolean ae2lt$isFastPlanningEnabled() {
         return ae2lt$getFastPlanningEnabled();
+    }
+
+    @Override
+    public void ae2lt$setRoutePolicy(CraftingRoutePolicy policy) {
+        this.ae2lt$routePolicy = policy == null ? CraftingRoutePolicy.DEFAULT : policy;
+    }
+
+    @Override
+    public CraftingRoutePolicy ae2lt$getRoutePolicy() {
+        return this.ae2lt$routePolicy;
     }
 
     @Inject(method = "runCraftAttempt", at = @At("HEAD"), cancellable = true, remap = false)
@@ -86,7 +100,7 @@ public abstract class CraftingCalculationMixin implements FastCraftingControl {
                 "output=" + this.output + " requested=" + amount + " simulate=" + simulate + " engine=thunderbolt");
         try {
             var attempt = FastCraftingPlanner.tryAttempt(
-                    craftingService, networkInv, getLevel(), output, amount, simulate);
+                    craftingService, networkInv, getLevel(), output, amount, simulate, ae2lt$routePolicy);
             if (attempt.handled()) {
                 // Reproduce the side effect of the real method body we are skipping, so that
                 // CraftingCalculation#isSimulation() reflects the attempt that produced this plan.

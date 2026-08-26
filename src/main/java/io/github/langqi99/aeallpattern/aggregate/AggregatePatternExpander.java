@@ -61,10 +61,10 @@ public final class AggregatePatternExpander {
                 AEItemKey definition = AEItemKey.of(encoded);
                 if (delegate instanceof IMolecularAssemblerSupportedPattern assemblerPattern) {
                     expanded.add(new AggregateAssemblerPatternDetails(
-                            recipe.patternId(), definition, assemblerPattern));
+                            recipe.patternId(), definition, assemblerPattern, recipe.processingTicks()));
                 } else {
                     expanded.add(new AggregatePatternDetails(
-                            recipe.patternId(), definition, delegate));
+                            recipe.patternId(), definition, delegate, recipe.processingTicks()));
                 }
             } catch (RuntimeException error) {
                 AeAllPattern.LOGGER.warn(

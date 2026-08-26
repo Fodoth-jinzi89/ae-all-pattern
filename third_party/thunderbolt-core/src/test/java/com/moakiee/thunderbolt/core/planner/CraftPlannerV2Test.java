@@ -16,7 +16,28 @@ import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 
+import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import com.moakiee.thunderbolt.ae2.crafting.RoutingPatternMetadata;
+
 class CraftPlannerV2Test {
+
+    private record RouteMetadata(String id, boolean aggregate, int ticks)
+            implements RoutingPatternMetadata {
+        @Override
+        public boolean isAggregatePattern() {
+            return aggregate;
+        }
+
+        @Override
+        public int processingTicks() {
+            return ticks;
+        }
+
+        @Override
+        public String stableRouteId() {
+            return id;
+        }
+    }
 
     private static long firingsOf(CraftPlan<String> plan, CraftPattern<String> p) {
         return plan.firings().getOrDefault(p, 0L);
@@ -79,6 +100,125 @@ class CraftPlannerV2Test {
         assertEquals(0L, firingsOf(plan, viaDiamond));
         assertEquals(1L, firingsOf(plan, viaIron));
         assertEquals(5L, plan.usedStock().get("iron"));
+    }
+
+    @Test
+    void aggregatePriorityIsARealPerOrderRouteBias() {
+        CraftPattern<String> aggregate = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("aggregateRaw", 1)),
+                new RouteMetadata("aggregate", true, 1));
+        CraftPattern<String> nativePattern = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("nativeRaw", 1)), "native");
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(aggregate).pattern(nativePattern)
+                .stock("aggregateRaw", 10).stock("nativeRaw", 10)
+                .build();
+
+        CraftPlan<String> defaultPlan = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT);
+        CraftPlan<String> aggregateFirst = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withAggregatePriority(1));
+
+        assertEquals(0L, firingsOf(defaultPlan, aggregate));
+        assertEquals(1L, firingsOf(defaultPlan, nativePattern));
+        assertEquals(1L, firingsOf(aggregateFirst, aggregate));
+        assertEquals(0L, firingsOf(aggregateFirst, nativePattern));
+    }
+
+    @Test
+    void pathPreferenceSwitchesBetweenShortAndDeepFeasibleRoutes() {
+        CraftPattern<String> direct = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("directRaw", 1)), "direct");
+        CraftPattern<String> deep = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("B", 1)), "deep");
+        CraftPattern<String> makeB = new CraftPattern<>(
+                "B", 1, List.of(CraftInput.of("deepRaw", 1)), "makeB");
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(direct).pattern(deep).pattern(makeB)
+                .stock("directRaw", 10).stock("deepRaw", 10)
+                .build();
+
+        CraftPlan<String> shortPlan = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withPathPreference(-1));
+        CraftPlan<String> deepPlan = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withPathPreference(1));
+
+        assertEquals(1L, firingsOf(shortPlan, direct));
+        assertEquals(0L, firingsOf(shortPlan, deep));
+        assertEquals(0L, firingsOf(deepPlan, direct));
+        assertEquals(1L, firingsOf(deepPlan, deep));
+        assertEquals(1L, firingsOf(deepPlan, makeB));
+    }
+
+    @Test
+    void highYieldAndFastPreferencesChangeOtherwiseFeasibleChoice() {
+        CraftPattern<String> fastLowYield = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("fastRaw", 1)),
+                new RouteMetadata("fast", false, 1));
+        CraftPattern<String> slowHighYield = new CraftPattern<>(
+                "A", 3, List.of(CraftInput.of("slowRaw", 2)),
+                new RouteMetadata("yield", false, 200));
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(fastLowYield).pattern(slowHighYield)
+                .stock("fastRaw", 10).stock("slowRaw", 2)
+                .build();
+
+        CraftPlan<String> yieldPlan = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withHighYield(true));
+        CraftPlan<String> fastPlan = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withFast(true));
+
+        assertEquals(1L, firingsOf(yieldPlan, slowHighYield));
+        assertEquals(0L, firingsOf(yieldPlan, fastLowYield));
+        assertEquals(1L, firingsOf(fastPlan, fastLowYield));
+        assertEquals(0L, firingsOf(fastPlan, slowHighYield));
+    }
+
+    @Test
+    void waitingPreferenceChoosesAnIdleProviderBeforeTheoreticalSpeed() {
+        CraftPattern<String> fastButBusy = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("fastRaw", 1)), List.of(),
+                new RouteMetadata("fastBusy", false, 1), 0, 2);
+        CraftPattern<String> slowButIdle = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("slowRaw", 1)), List.of(),
+                new RouteMetadata("slowIdle", false, 200), 1, 1);
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(fastButBusy).pattern(slowButIdle)
+                .stock("fastRaw", 10).stock("slowRaw", 10)
+                .build();
+
+        CraftPlan<String> plan = CraftPlannerV2.plan(
+                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withFast(true));
+
+        assertEquals(0L, firingsOf(plan, fastButBusy));
+        assertEquals(1L, firingsOf(plan, slowButIdle));
+    }
+
+    @Test
+    void draggedPreferenceOrderIsLexicographic() {
+        CraftPattern<String> shortLowYield = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("shortRaw", 1)), "short");
+        CraftPattern<String> deepHighYield = new CraftPattern<>(
+                "A", 3, List.of(CraftInput.of("B", 2)), "deepYield");
+        CraftPattern<String> makeB = new CraftPattern<>(
+                "B", 1, List.of(CraftInput.of("deepRaw", 1)), "makeB");
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(shortLowYield).pattern(deepHighYield).pattern(makeB)
+                .stock("shortRaw", 10).stock("deepRaw", 10)
+                .build();
+
+        CraftingRoutePolicy pathThenYield = CraftingRoutePolicy.DEFAULT
+                .withPathPreference(-1)
+                .withHighYield(true);
+        CraftingRoutePolicy yieldThenPath = pathThenYield.moveCriterion(2, 0);
+
+        CraftPlan<String> pathFirstPlan = CraftPlannerV2.plan(graph, "A", 1, pathThenYield);
+        CraftPlan<String> yieldFirstPlan = CraftPlannerV2.plan(graph, "A", 1, yieldThenPath);
+
+        assertEquals(1L, firingsOf(pathFirstPlan, shortLowYield));
+        assertEquals(0L, firingsOf(pathFirstPlan, deepHighYield));
+        assertEquals(0L, firingsOf(yieldFirstPlan, shortLowYield));
+        assertEquals(1L, firingsOf(yieldFirstPlan, deepHighYield));
     }
 
     /**

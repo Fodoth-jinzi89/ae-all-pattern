@@ -46,6 +46,7 @@ import appeng.me.cluster.implementations.CraftingCPUCluster;
 import appeng.me.service.CraftingService;
 
 import com.moakiee.thunderbolt.ae2.crafting.FastCraftingControl;
+import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicyContext;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCPU;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPool;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolProvider;
@@ -103,7 +104,9 @@ public abstract class TimeWheelCraftingServiceMixin {
                                                                 CallbackInfoReturnable<Future<ICraftingPlan>> cir,
                                                                 @Local CraftingCalculation job) {
         boolean enabled = TimeWheelFastPlanningGate.shouldEnableFastPlanning(thunderbolt$getTimeWheelPools());
-        ((FastCraftingControl) job).ae2lt$setFastPlanningEnabled(enabled);
+        FastCraftingControl control = (FastCraftingControl) job;
+        control.ae2lt$setFastPlanningEnabled(enabled);
+        control.ae2lt$setRoutePolicy(CraftingRoutePolicyContext.current());
     }
 
     @Inject(

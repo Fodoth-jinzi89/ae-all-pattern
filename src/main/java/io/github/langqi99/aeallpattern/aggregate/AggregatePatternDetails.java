@@ -5,21 +5,25 @@ import appeng.api.crafting.PatternDetailsTooltip;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
+import com.moakiee.thunderbolt.ae2.crafting.RoutingPatternMetadata;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
 
 /** A single child processing pattern expanded from an aggregate pattern item. */
-public final class AggregatePatternDetails implements IPatternDetails {
+public final class AggregatePatternDetails implements IPatternDetails, RoutingPatternMetadata {
     private final String patternId;
     private final AEItemKey definition;
     private final IPatternDetails delegate;
+    private final int processingTicks;
 
-    public AggregatePatternDetails(String patternId, AEItemKey definition, IPatternDetails delegate) {
+    public AggregatePatternDetails(
+            String patternId, AEItemKey definition, IPatternDetails delegate, int processingTicks) {
         this.patternId = Objects.requireNonNull(patternId, "patternId");
         this.definition = Objects.requireNonNull(definition, "definition");
         this.delegate = Objects.requireNonNull(delegate, "delegate");
+        this.processingTicks = Math.max(1, processingTicks);
     }
 
     @Override
@@ -50,6 +54,21 @@ public final class AggregatePatternDetails implements IPatternDetails {
     @Override
     public PatternDetailsTooltip getTooltip(Level level, TooltipFlag flags) {
         return delegate.getTooltip(level, flags);
+    }
+
+    @Override
+    public boolean isAggregatePattern() {
+        return true;
+    }
+
+    @Override
+    public int processingTicks() {
+        return processingTicks;
+    }
+
+    @Override
+    public String stableRouteId() {
+        return patternId;
     }
 
     @Override

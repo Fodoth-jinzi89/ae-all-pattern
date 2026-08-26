@@ -5,6 +5,7 @@ import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
 import io.github.langqi99.aeallpattern.registry.ModBlocks;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
+import io.github.langqi99.aeallpattern.registry.ModMenus;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternDecoder;
 import io.github.langqi99.aeallpattern.recipe.RecipeIndexService;
 import io.github.langqi99.aeallpattern.network.BindingNetwork;
@@ -30,6 +31,7 @@ public final class AeAllPattern {
         ModBlockEntities.register(modBus);
         ModDataComponents.register(modBus);
         ModItems.register(modBus);
+        ModMenus.register(modBus);
         AggregatePatternDecoder.register();
         MachineAdapterRegistry.initialize();
         modBus.addListener(ModBlockEntities::registerCapabilities);
@@ -41,6 +43,7 @@ public final class AeAllPattern {
         NeoForge.EVENT_BUS.addListener(AggregateMetadataSyncService::onPlayerChangedDimension);
         NeoForge.EVENT_BUS.addListener(ModCommands::register);
         if (FMLEnvironment.dist == Dist.CLIENT) {
+            modBus.addListener(ClientEvents::registerScreens);
             ClientEvents.register();
         }
         LOGGER.info("AE All Pattern initialized");

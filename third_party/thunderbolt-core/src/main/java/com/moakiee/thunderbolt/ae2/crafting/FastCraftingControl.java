@@ -18,4 +18,10 @@ public interface FastCraftingControl {
 
     /** @return whether the fast planner will be attempted for this calculation. */
     boolean ae2lt$isFastPlanningEnabled();
+
+    /** Attach the immutable route preferences for this single calculation. */
+    void ae2lt$setRoutePolicy(CraftingRoutePolicy policy);
+
+    /** @return the preferences captured when this calculation was created. */
+    CraftingRoutePolicy ae2lt$getRoutePolicy();
 }

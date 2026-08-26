@@ -7,6 +7,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
@@ -89,6 +92,17 @@ public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
                         type,
                         ModBlockEntities.TIANSHU_PATTERN_SELECTOR.get(),
                         TianshuPatternSelectorBlockEntity::serverTick);
+    }
+
+    @Override
+    protected InteractionResult useWithoutItem(
+            BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (!level.isClientSide()
+                && player instanceof ServerPlayer serverPlayer
+                && level.getBlockEntity(pos) instanceof TianshuPatternSelectorBlockEntity selector) {
+            serverPlayer.openMenu(selector, data -> data.writeBlockPos(pos));
+        }
+        return InteractionResult.sidedSuccess(level.isClientSide());
     }
 
     @Override

@@ -18,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 import appeng.api.config.Actionable;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.networking.crafting.ICraftingService;
+import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
@@ -27,6 +28,7 @@ import net.minecraft.world.level.Level;
 import appeng.crafting.CraftingPlan;
 import appeng.crafting.inv.ChildCraftingSimulationState;
 import appeng.crafting.inv.CraftingSimulationState;
+import appeng.me.service.CraftingService;
 
 import com.moakiee.thunderbolt.ae2.overload.model.MatchMode;
 import com.moakiee.thunderbolt.ae2.overload.pattern.OverloadPatternDetails;
@@ -140,6 +142,17 @@ public final class FastCraftingPlanner {
                                          AEKey output,
                                          long amount,
                                          boolean simulate) {
+        return tryAttempt(
+                craftingService, networkInv, level, output, amount, simulate, CraftingRoutePolicy.DEFAULT);
+    }
+
+    public static FastAttempt tryAttempt(ICraftingService craftingService,
+                                         CraftingSimulationState networkInv,
+                                         Level level,
+                                         AEKey output,
+                                         long amount,
+                                         boolean simulate,
+                                         CraftingRoutePolicy routePolicy) {
         if (amount <= 0) {
             return FastAttempt.decline();
         }
@@ -160,7 +173,9 @@ public final class FastCraftingPlanner {
             return FastAttempt.decline();
         }
 
-        CraftPlan<AEKey> plan = CraftPlannerV2.plan(builder.build(), output, amount);
+        CraftPlan<AEKey> plan = CraftPlannerV2.plan(
+                builder.build(), output, amount,
+                routePolicy == null ? CraftingRoutePolicy.DEFAULT : routePolicy);
 
         boolean multi = multiplePaths[0];
         // Emittable shortfalls are supplied by emitters, not crafted, so they don't make a plan
@@ -376,7 +391,9 @@ public final class FastCraftingPlanner {
                 long outAmount = Sat.mul(primary.amount(), outputScale);
                 // Keep the best (lowest rank-sum) up to FUZZY_NONCYCLE_STEPS combinations; when the
                 // product is within budget this emits all of them, otherwise it greedily keeps the front.
-                emitBestCombinations(builder, seen, queue, key, outAmount, byproducts, slotOptions, details);
+                ProviderAvailability providers = providerAvailability(craftingService, details);
+                emitBestCombinations(
+                        builder, seen, queue, key, outAmount, byproducts, slotOptions, details, providers);
                 registeredForKey++;
             }
             if (registeredForKey > 1) {
@@ -588,7 +605,8 @@ public final class FastCraftingPlanner {
      */
     private static void emitBestCombinations(CraftGraph.Builder<AEKey> builder, Set<AEKey> seen, Deque<AEKey> queue,
                                          AEKey key, long outputAmount, List<CraftOutput<AEKey>> byproducts,
-                                         List<List<CraftInput<AEKey>>> slotOptions, IPatternDetails source) {
+                                         List<List<CraftInput<AEKey>>> slotOptions, IPatternDetails source,
+                                         ProviderAvailability providers) {
         for (List<CraftInput<AEKey>> coreInputs
                 : BoundedCombinations.bestFirst(slotOptions, (int) FUZZY_NONCYCLE_STEPS)) {
             // A container option (consume full, return empty) contributes its leftover as a byproduct of
@@ -608,8 +626,36 @@ public final class FastCraftingPlanner {
                     }
                 }
             }
-            builder.pattern(new CraftPattern<>(key, outputAmount, coreInputs, combo, source));
+            builder.pattern(new CraftPattern<>(
+                    key, outputAmount, coreInputs, combo, source,
+                    providers.idle(), providers.total()));
         }
+    }
+
+    private static ProviderAvailability providerAvailability(
+            ICraftingService craftingService, IPatternDetails details) {
+        if (!(craftingService instanceof CraftingService service)) {
+            return ProviderAvailability.UNKNOWN;
+        }
+        int idle = 0;
+        int total = 0;
+        try {
+            for (ICraftingProvider provider : service.getProviders(details)) {
+                total++;
+                if (!provider.isBusy()) {
+                    idle++;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Provider lists may change as nodes join or leave. Unknown is a
+            // safe tie and falls back to known processing time.
+            return ProviderAvailability.UNKNOWN;
+        }
+        return new ProviderAvailability(idle, total);
+    }
+
+    private record ProviderAvailability(int idle, int total) {
+        private static final ProviderAvailability UNKNOWN = new ProviderAvailability(-1, -1);
     }
 
     private static CraftingPlan toAe2Plan(AEKey output, long amount, CraftPlan<AEKey> plan,

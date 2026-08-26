@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import com.moakiee.thunderbolt.ae2.crafting.RoutingPatternMetadata;
+
 /**
  * v2 autocrafting planner: dynamic-capacity greedy over a shared mutable pool, with byproduct reuse
  * and bounded backtracking for contended choices.
@@ -69,6 +72,7 @@ public final class CraftPlannerV2<K> {
 
     private final CraftGraph<K> graph;
     private final int visitCap;
+    private final CraftingRoutePolicy routePolicy;
 
     // Current recursion depth of the bounded fallback search (obtain/fire). Guards against stack overflow
     // on degenerate deep chains; see MAX_OBTAIN_DEPTH. Not part of the rolled-back planning state.
@@ -76,6 +80,7 @@ public final class CraftPlannerV2<K> {
 
     private final Map<K, List<CraftPattern<K>>> patternsByOutput = new HashMap<>();
     private Map<K, Long> capacity;
+    private final Map<CraftPattern<K>, Integer> routeDepth = new IdentityHashMap<>();
 
     // Mutable planning state (all writes go through the trail so a branch can be rolled back).
     private final Map<K, Long> bpPool = new HashMap<>();      // byproduct / surplus supply
@@ -97,9 +102,10 @@ public final class CraftPlannerV2<K> {
     // introduces no new missing, so the decision survives nested single-recipe commits.
     private long missingTotal;
 
-    private CraftPlannerV2(CraftGraph<K> graph, int visitCap) {
+    private CraftPlannerV2(CraftGraph<K> graph, int visitCap, CraftingRoutePolicy routePolicy) {
         this.graph = graph;
         this.visitCap = Math.max(1, visitCap);
+        this.routePolicy = routePolicy == null ? CraftingRoutePolicy.DEFAULT : routePolicy;
     }
 
     public static <K> CraftPlan<K> plan(CraftGraph<K> graph, K target, long amount) {
@@ -107,7 +113,12 @@ public final class CraftPlannerV2<K> {
     }
 
     public static <K> CraftPlan<K> plan(CraftGraph<K> graph, K target, long amount, int visitCap) {
-        return new CraftPlannerV2<>(graph, visitCap).run(target, amount);
+        return new CraftPlannerV2<>(graph, visitCap, CraftingRoutePolicy.DEFAULT).run(target, amount);
+    }
+
+    public static <K> CraftPlan<K> plan(
+            CraftGraph<K> graph, K target, long amount, CraftingRoutePolicy routePolicy) {
+        return new CraftPlannerV2<>(graph, DEFAULT_VISIT_CAP, routePolicy).run(target, amount);
     }
 
     private CraftPlan<K> run(K target, long amount) {
@@ -129,6 +140,7 @@ public final class CraftPlannerV2<K> {
             order.add(postOrder.get(i));
         }
         this.capacity = capacityFromOrder(order, items.size());
+        computeRouteDepth(order);
 
         // 1) Linear backbone (v2-memo-deps / v2-lazy-deduct): one topological aggregation pass,
         //    each item resolved exactly once = O(n + E). Reservation-based capacity gives O(1)
@@ -241,6 +253,24 @@ public final class CraftPlannerV2<K> {
         return cap;
     }
 
+    /** Computes the longest acyclic dependency chain beneath every candidate recipe. */
+    private void computeRouteDepth(List<K> order) {
+        Map<K, Integer> itemDepth = new HashMap<>();
+        for (int i = order.size() - 1; i >= 0; i--) {
+            K item = order.get(i);
+            int best = 0;
+            for (CraftPattern<K> pattern : patternsByOutput.getOrDefault(item, List.of())) {
+                int depthForPattern = 1;
+                for (CraftInput<K> input : pattern.inputs()) {
+                    depthForPattern = Math.max(depthForPattern, 1 + itemDepth.getOrDefault(input.key(), 0));
+                }
+                routeDepth.put(pattern, depthForPattern);
+                best = Math.max(best, depthForPattern);
+            }
+            itemDepth.put(item, best);
+        }
+    }
+
     private long producibleVia(CraftPattern<K> p, Map<K, Long> cap) {
         long bound = Sat.SAT;
         for (CraftInput<K> in : p.inputs()) {
@@ -313,7 +343,9 @@ public final class CraftPlannerV2<K> {
     private void allocateLinear(K x, long d, List<CraftPattern<K>> ps,
                                 Map<K, Long> need, Map<K, Long> bp, Map<CraftPattern<K>, Long> fired) {
         List<CraftPattern<K>> ordered = new ArrayList<>(ps);
-        ordered.sort((a, b) -> Long.compare(capRemainingVia(b, need), capRemainingVia(a, need)));
+        long requested = d;
+        ordered.sort((a, b) -> compareRoutes(a, b, requested,
+                capRemainingVia(a, need), capRemainingVia(b, need)));
 
         for (CraftPattern<K> r : ordered) {
             if (d <= 0) {
@@ -413,7 +445,7 @@ public final class CraftPlannerV2<K> {
             return commitBestEffort(ps, x, d);
         }
 
-        List<CraftPattern<K>> ordered = byCapacityDesc(ps);
+        List<CraftPattern<K>> ordered = byPreference(ps, d);
         for (CraftPattern<K> r : ordered) {
             int mark = trail.size();
             long beforeMissing = missingTotal;
@@ -428,7 +460,7 @@ public final class CraftPlannerV2<K> {
     }
 
     private long commitBestEffort(List<CraftPattern<K>> ps, K x, long d) {
-        CraftPattern<K> r = ps.size() == 1 ? ps.get(0) : byCapacityDesc(ps).get(0);
+        CraftPattern<K> r = ps.size() == 1 ? ps.get(0) : byPreference(ps, d).get(0);
         return fire(x, r, d, false);
     }
 
@@ -499,10 +531,120 @@ public final class CraftPlannerV2<K> {
         return got;
     }
 
-    private List<CraftPattern<K>> byCapacityDesc(List<CraftPattern<K>> ps) {
+    private List<CraftPattern<K>> byPreference(List<CraftPattern<K>> ps, long demand) {
         List<CraftPattern<K>> sorted = new ArrayList<>(ps);
-        sorted.sort((a, b) -> Long.compare(producibleVia(b, capacity), producibleVia(a, capacity)));
+        sorted.sort((a, b) -> compareRoutes(
+                a, b, demand, producibleVia(a, capacity), producibleVia(b, capacity)));
         return sorted;
+    }
+
+    /** Lower comparator value means {@code a} should be attempted before {@code b}. */
+    private int compareRoutes(
+            CraftPattern<K> a, CraftPattern<K> b, long demand, long capacityA, long capacityB) {
+        if (routePolicy.requireFeasible()) {
+            boolean feasibleA = capacityA >= demand;
+            boolean feasibleB = capacityB >= demand;
+            if (feasibleA != feasibleB) {
+                return feasibleA ? -1 : 1;
+            }
+        }
+
+        // Aggregate priority is a real priority tier, not a soft score. With
+        // the default -1 every feasible hand-authored AE pattern (tier 0)
+        // wins before any generated aggregate pattern is considered.
+        int byAggregatePriority = Integer.compare(routePriority(b), routePriority(a));
+        if (byAggregatePriority != 0) {
+            return byAggregatePriority;
+        }
+
+        // The player orders these criteria in the UI. Compare them
+        // lexicographically so the first enabled row always wins; later rows
+        // only break ties. This makes drag order observable and predictable.
+        for (int position = 0; position < CraftingRoutePolicy.CRITERION_COUNT; position++) {
+            int criterion = routePolicy.criterionAt(position);
+            int comparison = compareCriterion(criterion, a, b, capacityA, capacityB);
+            if (comparison != 0) {
+                return comparison;
+            }
+        }
+
+        int byCapacity = Long.compare(capacityB, capacityA);
+        if (byCapacity != 0) {
+            return byCapacity;
+        }
+        return stableRouteId(a).compareTo(stableRouteId(b));
+    }
+
+    private int routePriority(CraftPattern<K> pattern) {
+        RoutingPatternMetadata metadata = pattern.source() instanceof RoutingPatternMetadata value ? value : null;
+        return metadata != null && metadata.isAggregatePattern()
+                ? routePolicy.aggregatePriority()
+                : 0;
+    }
+
+    private int compareCriterion(
+            int criterion,
+            CraftPattern<K> a,
+            CraftPattern<K> b,
+            long capacityA,
+            long capacityB) {
+        return switch (criterion) {
+            case CraftingRoutePolicy.CRITERION_PATH -> comparePath(a, b);
+            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> routePolicy.preferStockSurplus()
+                    ? Long.compare(capacityB, capacityA)
+                    : 0;
+            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> routePolicy.preferHighYield()
+                    ? Long.compare(b.outputAmount(), a.outputAmount())
+                    : 0;
+            case CraftingRoutePolicy.CRITERION_FAST -> routePolicy.preferFast()
+                    ? compareWaitingTime(a, b)
+                    : 0;
+            default -> 0;
+        };
+    }
+
+    private int comparePath(CraftPattern<K> a, CraftPattern<K> b) {
+        int preference = routePolicy.pathPreference();
+        if (preference == 0) {
+            return 0;
+        }
+        int depthA = routeDepth.getOrDefault(a, 1);
+        int depthB = routeDepth.getOrDefault(b, 1);
+        return preference < 0
+                ? Integer.compare(depthA, depthB)
+                : Integer.compare(depthB, depthA);
+    }
+
+    private int compareWaitingTime(CraftPattern<K> a, CraftPattern<K> b) {
+        if (a.idleProviderCount() >= 0 && b.idleProviderCount() >= 0) {
+            boolean canStartA = a.idleProviderCount() > 0;
+            boolean canStartB = b.idleProviderCount() > 0;
+            if (canStartA != canStartB) {
+                return canStartA ? -1 : 1;
+            }
+            int byIdleCapacity = Integer.compare(b.idleProviderCount(), a.idleProviderCount());
+            if (byIdleCapacity != 0) {
+                return byIdleCapacity;
+            }
+            int byTotalCapacity = Integer.compare(b.providerCount(), a.providerCount());
+            if (byTotalCapacity != 0) {
+                return byTotalCapacity;
+            }
+        }
+        return Integer.compare(processingTicks(a), processingTicks(b));
+    }
+
+    private int processingTicks(CraftPattern<K> pattern) {
+        return pattern.source() instanceof RoutingPatternMetadata metadata
+                ? Math.max(1, metadata.processingTicks())
+                : 1;
+    }
+
+    private String stableRouteId(CraftPattern<K> pattern) {
+        if (pattern.source() instanceof RoutingPatternMetadata metadata) {
+            return metadata.stableRouteId();
+        }
+        return String.valueOf(pattern.source());
     }
 
     // ---- trail-logged mutation helpers -----------------------------------------------------------

@@ -11,6 +11,7 @@ import appeng.me.helpers.MachineSource;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPool;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolHost;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolProvider;
+import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
 import io.github.langqi99.aeallpattern.registry.ModBlocks;
 import java.util.EnumSet;
@@ -23,22 +24,28 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 /** Restored single-block host based on AE2 Lightning Tech's former test CPU. */
 public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEntity
-        implements TimeWheelCraftingCpuPoolHost {
+        implements TimeWheelCraftingCpuPoolHost, MenuProvider {
     public static final long STORAGE_BYTES = Long.MAX_VALUE;
     public static final int PARALLELISM = 16_384;
 
     private static final double IDLE_POWER_USAGE = 16.0D;
     private static final String CPU_POOL_TAG = "CpuPool";
+    private static final String ROUTING_POLICY_TAG = "RoutingPolicy";
 
     private final IActionSource actionSource = new MachineSource(getMainNode()::getNode);
     private final TimeWheelCraftingCpuPool cpuPool =
             new TimeWheelCraftingCpuPool(this, STORAGE_BYTES, PARALLELISM);
     private long lastCpuDirtyTick = Long.MIN_VALUE;
+    private CraftingRoutePolicy routingPolicy = CraftingRoutePolicy.DEFAULT;
 
     public TianshuPatternSelectorBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.TIANSHU_PATTERN_SELECTOR.get(), pos, state);
@@ -98,6 +105,23 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
     }
 
     @Override
+    public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) {
+        return new TianshuRoutingMenu(id, inventory, this);
+    }
+
+    public CraftingRoutePolicy getRoutingPolicy() {
+        return routingPolicy;
+    }
+
+    public void setRoutingPolicy(CraftingRoutePolicy routingPolicy) {
+        CraftingRoutePolicy normalized = routingPolicy == null ? CraftingRoutePolicy.DEFAULT : routingPolicy;
+        if (!this.routingPolicy.equals(normalized)) {
+            this.routingPolicy = normalized;
+            saveChanges();
+        }
+    }
+
+    @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         if (cpuPool.hasPersistentState()) {
@@ -107,6 +131,15 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
                 tag.put(CPU_POOL_TAG, poolTag);
             }
         }
+        CompoundTag policyTag = new CompoundTag();
+        policyTag.putInt("AggregatePriority", routingPolicy.aggregatePriority());
+        policyTag.putBoolean("RequireFeasible", routingPolicy.requireFeasible());
+        policyTag.putInt("PathPreference", routingPolicy.pathPreference());
+        policyTag.putBoolean("PreferStockSurplus", routingPolicy.preferStockSurplus());
+        policyTag.putBoolean("PreferHighYield", routingPolicy.preferHighYield());
+        policyTag.putBoolean("PreferFast", routingPolicy.preferFast());
+        policyTag.putInt("PreferenceOrder", routingPolicy.preferenceOrder());
+        tag.put(ROUTING_POLICY_TAG, policyTag);
     }
 
     @Override
@@ -114,6 +147,21 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
         super.loadTag(tag, registries);
         if (tag.contains(CPU_POOL_TAG, CompoundTag.TAG_COMPOUND)) {
             cpuPool.readFromNBT(tag.getCompound(CPU_POOL_TAG), registries);
+        }
+        if (tag.contains(ROUTING_POLICY_TAG, CompoundTag.TAG_COMPOUND)) {
+            CompoundTag policyTag = tag.getCompound(ROUTING_POLICY_TAG);
+            routingPolicy = new CraftingRoutePolicy(
+                    policyTag.contains("AggregatePriority") ? policyTag.getInt("AggregatePriority") : -1,
+                    !policyTag.contains("RequireFeasible") || policyTag.getBoolean("RequireFeasible"),
+                    policyTag.getInt("PathPreference"),
+                    policyTag.getBoolean("PreferStockSurplus"),
+                    policyTag.getBoolean("PreferHighYield"),
+                    policyTag.getBoolean("PreferFast"),
+                    policyTag.contains("PreferenceOrder")
+                            ? policyTag.getInt("PreferenceOrder")
+                            : CraftingRoutePolicy.DEFAULT_PREFERENCE_ORDER);
+        } else {
+            routingPolicy = CraftingRoutePolicy.DEFAULT;
         }
     }
 

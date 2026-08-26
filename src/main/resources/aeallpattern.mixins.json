@@ -4,7 +4,12 @@
   "package": "io.github.langqi99.aeallpattern.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "PatternProviderLogicMixin"
+    "AEBaseMenuAccessor",
+    "PatternProviderLogicMixin",
+    "CraftConfirmMenuMixin"
+  ],
+  "client": [
+    "client.CraftConfirmScreenRoutingMixin"
   ],
   "injectors": {
     "defaultRequire": 1

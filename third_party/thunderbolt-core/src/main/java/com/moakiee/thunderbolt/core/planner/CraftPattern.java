@@ -23,6 +23,8 @@ public final class CraftPattern<K> {
     private final List<CraftInput<K>> inputs;
     private final List<CraftOutput<K>> byproducts;
     private final Object source;
+    private final int idleProviderCount;
+    private final int providerCount;
 
     public CraftPattern(K output, long outputAmount, List<CraftInput<K>> inputs, Object source) {
         this(output, outputAmount, inputs, List.of(), source);
@@ -30,6 +32,12 @@ public final class CraftPattern<K> {
 
     public CraftPattern(K output, long outputAmount, List<CraftInput<K>> inputs,
                         List<CraftOutput<K>> byproducts, Object source) {
+        this(output, outputAmount, inputs, byproducts, source, -1, -1);
+    }
+
+    public CraftPattern(K output, long outputAmount, List<CraftInput<K>> inputs,
+                        List<CraftOutput<K>> byproducts, Object source,
+                        int idleProviderCount, int providerCount) {
         this.output = Objects.requireNonNull(output, "output");
         if (outputAmount <= 0) {
             throw new IllegalArgumentException("outputAmount must be > 0, was " + outputAmount);
@@ -38,6 +46,10 @@ public final class CraftPattern<K> {
         this.inputs = List.copyOf(inputs);
         this.byproducts = List.copyOf(byproducts);
         this.source = source;
+        this.providerCount = Math.max(-1, providerCount);
+        this.idleProviderCount = this.providerCount < 0
+                ? -1
+                : Math.max(0, Math.min(idleProviderCount, this.providerCount));
     }
 
     public K output() {
@@ -60,6 +72,16 @@ public final class CraftPattern<K> {
     /** Opaque handle to the originating recipe; may be {@code null} in tests. */
     public Object source() {
         return source;
+    }
+
+    /** Number of providers that reported idle when this order was planned, or -1 if unknown. */
+    public int idleProviderCount() {
+        return idleProviderCount;
+    }
+
+    /** Total providers able to execute this pattern, or -1 if unknown. */
+    public int providerCount() {
+        return providerCount;
     }
 
     @Override

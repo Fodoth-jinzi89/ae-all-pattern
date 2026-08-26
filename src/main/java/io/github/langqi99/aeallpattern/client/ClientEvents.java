@@ -13,6 +13,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import io.github.langqi99.aeallpattern.registry.ModMenus;
+import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingScreen;
+import appeng.init.client.InitScreens;
 
 public final class ClientEvents {
     private static final double MAX_RENDER_DISTANCE_SQUARED = 96.0 * 96.0;
@@ -24,6 +28,14 @@ public final class ClientEvents {
         NeoForge.EVENT_BUS.addListener(ClientEvents::renderBindings);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onLogout);
         NeoForge.EVENT_BUS.addListener(ClientJeiAggregateScanner::onRightClickBlock);
+    }
+
+    public static void registerScreens(RegisterMenuScreensEvent event) {
+        InitScreens.register(
+                event,
+                ModMenus.TIANSHU_ROUTING.get(),
+                TianshuRoutingScreen::new,
+                "/screens/priority.json");
     }
 
     private static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {

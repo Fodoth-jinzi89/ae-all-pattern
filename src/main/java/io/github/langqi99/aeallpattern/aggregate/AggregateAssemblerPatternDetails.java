@@ -6,6 +6,7 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
+import com.moakiee.thunderbolt.ae2.crafting.RoutingPatternMetadata;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.core.NonNullList;
@@ -15,18 +16,22 @@ import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.level.Level;
 
 /** Keeps AE2's molecular-assembler behavior while giving an aggregate child a unique definition. */
-public final class AggregateAssemblerPatternDetails implements IMolecularAssemblerSupportedPattern {
+public final class AggregateAssemblerPatternDetails
+        implements IMolecularAssemblerSupportedPattern, RoutingPatternMetadata {
     private final String patternId;
     private final AEItemKey definition;
     private final IMolecularAssemblerSupportedPattern delegate;
+    private final int processingTicks;
 
     public AggregateAssemblerPatternDetails(
             String patternId,
             AEItemKey definition,
-            IMolecularAssemblerSupportedPattern delegate) {
+            IMolecularAssemblerSupportedPattern delegate,
+            int processingTicks) {
         this.patternId = Objects.requireNonNull(patternId, "patternId");
         this.definition = Objects.requireNonNull(definition, "definition");
         this.delegate = Objects.requireNonNull(delegate, "delegate");
+        this.processingTicks = Math.max(1, processingTicks);
     }
 
     @Override
@@ -72,6 +77,21 @@ public final class AggregateAssemblerPatternDetails implements IMolecularAssembl
     @Override
     public PatternDetailsTooltip getTooltip(Level level, TooltipFlag flags) {
         return delegate.getTooltip(level, flags);
+    }
+
+    @Override
+    public boolean isAggregatePattern() {
+        return true;
+    }
+
+    @Override
+    public int processingTicks() {
+        return processingTicks;
+    }
+
+    @Override
+    public String stableRouteId() {
+        return patternId;
     }
 
     @Override

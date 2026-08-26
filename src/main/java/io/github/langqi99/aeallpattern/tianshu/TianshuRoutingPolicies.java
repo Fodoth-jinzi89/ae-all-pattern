@@ -1,0 +1,35 @@
+package io.github.langqi99.aeallpattern.tianshu;
+
+import appeng.api.networking.IGrid;
+import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolProvider;
+import java.util.Comparator;
+
+/** Resolves the deterministic network default when more than one router is connected. */
+public final class TianshuRoutingPolicies {
+    private TianshuRoutingPolicies() {
+    }
+
+    public static boolean isAvailable(IGrid grid) {
+        return findRouter(grid) != null;
+    }
+
+    public static CraftingRoutePolicy resolve(IGrid grid) {
+        TianshuPatternSelectorBlockEntity router = findRouter(grid);
+        return router == null ? CraftingRoutePolicy.DEFAULT : router.getRoutingPolicy();
+    }
+
+    public static TianshuPatternSelectorBlockEntity findRouter(IGrid grid) {
+        if (grid == null) {
+            return null;
+        }
+        return grid.getActiveMachines(TimeWheelCraftingCpuPoolProvider.class).stream()
+                .filter(TianshuPatternSelectorBlockEntity.class::isInstance)
+                .map(TianshuPatternSelectorBlockEntity.class::cast)
+                .min(Comparator
+                        .comparing((TianshuPatternSelectorBlockEntity router) ->
+                                router.getLevel() == null ? "" : router.getLevel().dimension().location().toString())
+                        .thenComparingLong(router -> router.getBlockPos().asLong()))
+                .orElse(null);
+    }
+}
