@@ -4,11 +4,59 @@ AE All Pattern is an independent add-on and is not affiliated with Mojang,
 Microsoft, Applied Energistics 2, JEI, or Mekanism.
 
 - Applied Energistics 2 is used through its published API and Maven artifact.
+- AE2 Lightning Tech is the source of the adapted gameplay textures, models,
+  and single-block CPU host listed below.
+- Thunderbolt Core is vendored as a separate source build under
+  `third_party/thunderbolt-core` and supplies the optimized crafting planner,
+  time-wheel dispatcher, virtual CPU pool, and AE2 integration mixins.
 - JEI is an optional client-side contextual-help integration.
 - Mekanism is an optional machine integration target used through its public API.
 - Minecraft and all referenced mod names and assets belong to their respective owners.
 
-This repository does not redistribute upstream source code, JAR files, textures,
-or models. The binder, linker, and mod-icon pixel art are original project assets
-created with OpenAI's built-in image generation on 2026-08-25 and reduced with
-nearest-neighbor scaling; they do not copy an upstream asset namespace.
+## AE2 Lightning Tech adaptations
+
+The following files are adaptations of assets from
+[AE2 Lightning Tech](https://github.com/ae2lt/AE2-Lightning-Tech) at revision
+`379b99a3ef188218caab0071b08d1c707d7e9e27`:
+
+- `pattern_binder.png` is based on
+  `wireless_tianshu_pattern_encoding_terminal.png`. Its screen contains a
+  six-by-six crop adapted from `matter_warping_matrix_overload_main_core.png`.
+- `pattern_linker.png` is based on
+  `matter_warping_matrix_overload_main_core.png`. Its pink core pixels were
+  remapped to the Tianshu terminal's purple palette and two diagonal pixels
+  were changed to a blue link marker.
+- `tianshu_pattern_selector.json` and
+  `tianshu_pattern_selector_active.json` are namespace-renamed adaptations of
+  the upstream Tianshu supercomputer controller block models.
+- `tianshu_pattern_selector.png` and
+  `tianshu_pattern_selector_active.png` are namespace-renamed copies of the
+  matching 64x64 controller textures.
+
+The Java single-block host in `io.github.langqi99.aeallpattern.tianshu` is
+adapted from AE2 Lightning Tech's removed `TestTimeWheelCraftingCpuBlock` and
+`TestTimeWheelCraftingCpuBlockEntity` at revision
+`fe8590ea45becd0c5f4ab67f4e779612eff09a8a`. It has been renamed, integrated
+with this mod's registries and resource namespace, given an active blockstate,
+and otherwise preserves the upstream infinite-storage / 16384-parallel CPU
+configuration. Pattern-selection behavior is not included yet.
+
+AE2 Lightning Tech credits its project team on the upstream repository. Its
+textures and other visual assets are licensed under
+[CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/).
+The adapted texture and model files are distributed under the same license.
+
+AE2 Lightning Tech source code is licensed under GNU LGPL 3.0. The adapted
+single-block host remains covered by that license.
+
+## Vendored Thunderbolt Core
+
+`third_party/thunderbolt-core` is taken from
+[Thunderbolt Core](https://github.com/ae2lt/Thunderbolt-Core) at revision
+`171a6cba1a5d8d62a0019dd8ff74158344928f54`. Its source and generated binary
+remain licensed under GNU LGPL 3.0; the upstream `LICENSE` is retained in that
+directory and included in its JAR.
+
+No upstream asset namespace is bundled: adapted assets live under the
+`aeallpattern` namespace. The remaining project artwork, including the mod
+icon, is an original project asset.

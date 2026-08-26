@@ -2,18 +2,20 @@
 
 > 用一次绑定，让机器支持的配方自动成为 AE2 的虚拟处理样板。
 
-AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先用“全样板绑定器”绑定一个 AE 网络锚点，再潜行右击目标机器。绑定成功后，机器会显示紫色 AE 风格包围框，AE 网络会把该机器可自动化的配方作为虚拟处理样板公开，无需逐张制作并存放实体样板。
+AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先用“全样板绑定器”选择一个 AE 网络锚点，再连续潜行右击任意数量的目标机器。绑定成功后，机器会显示紫色 AE 风格立体框架，AE 网络会把这些机器可自动化的配方作为虚拟处理样板公开，无需逐张制作并存放实体样板。
 
 ## 当前状态
 
 **0.1.0 MVP 已完成。** 链接器是占用一个频道、消耗 2 AE/t 的真实 AE 节点；绑定器、世界持久化、紫色包围框、虚拟处理样板、安全输入缓冲、诊断命令和可选 Mekanism/JEI 集成都已实现。自动化测试同时覆盖只有 AE2 的最小专服和安装 JEI + Mekanism 的完整环境。
 
+“天枢样版选择器”的第一阶段也已接入：它恢复为一个可六面接入 AE 网络的单方块，提供无限合成存储、16384 并行时间轮 CPU 和 Thunderbolt 快速规划器。方块在线时会切换为发光模型；样版选择功能暂时明确留空，等待下一阶段在这个调度核心上实现。
+
 ## 目标交互
 
 1. 手持绑定器右击“全样板链接器”，绑定 AE 网络锚点。
-2. 潜行右击目标机器，例如 Mekanism 电力熔炉。
+2. 潜行右击目标机器，例如 Mekanism 电力熔炉；链接器选择会保留，可继续绑定其他机器。
 3. 服务端验证权限、距离、维度、区块与机器适配器。
-4. 客户端为目标机器显示紫色 AE 风格包围框。
+4. 客户端为目标机器显示贴合方块轮廓的紫色 AE 风格立体框架。
 5. 服务端从 `RecipeManager` 和机器公开 API 建立配方目录。
 6. 链接器通过 AE2 `ICraftingProvider` 发布虚拟处理样板。
 7. AE 发起合成时，链接器先持久接管完整输入，再由适配器跨面安全转运；绑定机器所有可抽取输出自动回到同一 ME 网络。
@@ -36,8 +38,11 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 | 加载器 | NeoForge 21.1.219+ |
 | Java | 21 |
 | Applied Energistics 2 | 19.2.17 |
-| JEI | 可选，绑定器/链接器使用说明 |
+| Thunderbolt Core | 1.0.0 源码内嵌（时间轮 CPU / 快速规划） |
+| JEI | 可选，全样板生成器的通用配方发现 |
+| AE2 JEI Integration | 可选，把 JEI 原料类型转换为 AE 通用键 |
 | Mekanism | 可选，冶炼、粉碎、富集机器与工厂 |
+| Applied Mekanistics | 可选，Mekanism 气体/化学品的 AE 存储键与物流 |
 
 ## 已支持机器
 
@@ -45,7 +50,12 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 - Mekanism 充能冶炼炉及冶炼工厂。
 - Mekanism 粉碎机/粉碎工厂、富集仓/富集工厂。
 
-绑定时点击的面就是投料能力面。机器产物仍遵循 AE2 原生处理样板语义，需要由导入总线、管道或其他物流返回 AE 网络。
+全样板生成器生成的聚合样板直接保存 AE `GenericStack`：物品和流体原生支持；安装
+Applied Mekanistics 与 AE2 JEI Integration 后，Mekanism 气体及统一 Chemical 类型也会按原始
+类型和数量进入样板，不会被替换成桶、储罐或其他物品。机器投料与产物回收继续由 AE2 及其
+兼容附属负责，聚合样板只发布配方。
+
+绑定时点击的面是首选投料能力面；该面无法完整接收时，适配器会寻找机器真正可用的输入能力。绑定机器通过输出能力公开的所有物品都会由链接器自动送回同一个 ME 网络，不要求额外放置导入总线。
 
 ## 开发
 
@@ -61,4 +71,4 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 
 ## 许可证
 
-本项目自有代码使用 MIT License。第三方项目与素材归各自作者所有，详见 [NOTICE.md](NOTICE.md) 与 [许可和素材政策](docs/development/licensing-and-assets.md)。
+本项目自有代码使用 MIT License。Thunderbolt Core 和源自 AE2 Lightning Tech 的单方块 CPU 代码按 LGPL-3.0 保留；天枢控制器模型与贴图按 CC BY-NC-SA 3.0 保留。完整来源见 [NOTICE.md](NOTICE.md) 与 [许可和素材政策](docs/development/licensing-and-assets.md)。

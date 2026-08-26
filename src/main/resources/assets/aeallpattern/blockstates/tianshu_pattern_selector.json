@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,lit=false": { "model": "aeallpattern:block/tianshu_pattern_selector" },
+    "facing=east,lit=false": { "model": "aeallpattern:block/tianshu_pattern_selector", "y": 90 },
+    "facing=south,lit=false": { "model": "aeallpattern:block/tianshu_pattern_selector", "y": 180 },
+    "facing=west,lit=false": { "model": "aeallpattern:block/tianshu_pattern_selector", "y": 270 },
+    "facing=north,lit=true": { "model": "aeallpattern:block/tianshu_pattern_selector_active" },
+    "facing=east,lit=true": { "model": "aeallpattern:block/tianshu_pattern_selector_active", "y": 90 },
+    "facing=south,lit=true": { "model": "aeallpattern:block/tianshu_pattern_selector_active", "y": 180 },
+    "facing=west,lit=true": { "model": "aeallpattern:block/tianshu_pattern_selector_active", "y": 270 }
+  }
+}

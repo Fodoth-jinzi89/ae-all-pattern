@@ -7,16 +7,33 @@ import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.registration.IRecipeRegistration;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import mezz.jei.api.runtime.IJeiRuntime;
+import java.util.Optional;
 
 /** Optional client-side JEI help; recipe discovery remains server-authoritative. */
 @JeiPlugin
 public final class AeAllPatternJeiPlugin implements IModPlugin {
+    private static volatile IJeiRuntime runtime;
     private static final ResourceLocation ID =
             ResourceLocation.fromNamespaceAndPath(AeAllPattern.MOD_ID, "jei_plugin");
 
     @Override
     public ResourceLocation getPluginUid() {
         return ID;
+    }
+
+    @Override
+    public void onRuntimeAvailable(IJeiRuntime availableRuntime) {
+        runtime = availableRuntime;
+    }
+
+    @Override
+    public void onRuntimeUnavailable() {
+        runtime = null;
+    }
+
+    public static Optional<IJeiRuntime> runtime() {
+        return Optional.ofNullable(runtime);
     }
 
     @Override

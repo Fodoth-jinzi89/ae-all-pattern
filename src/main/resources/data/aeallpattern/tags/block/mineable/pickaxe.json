@@ -1,5 +1,6 @@
 {
   "values": [
-    "aeallpattern:pattern_linker"
+    "aeallpattern:pattern_linker",
+    "aeallpattern:tianshu_pattern_selector"
   ]
 }

@@ -2,6 +2,9 @@ package io.github.langqi99.aeallpattern.registry;
 
 import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.binding.PatternBinderItem;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternItem;
+import io.github.langqi99.aeallpattern.aggregate.AllPatternGeneratorItem;
+import io.github.langqi99.aeallpattern.tianshu.TianshuPatternSelectorItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -21,6 +24,14 @@ public final class ModItems {
             "pattern_binder", PatternBinderItem::new, new Item.Properties().stacksTo(1));
     public static final DeferredItem<BlockItem> PATTERN_LINKER = ITEMS.registerSimpleBlockItem(
             "pattern_linker", ModBlocks.PATTERN_LINKER, new Item.Properties());
+    public static final DeferredItem<TianshuPatternSelectorItem> TIANSHU_PATTERN_SELECTOR = ITEMS.registerItem(
+            "tianshu_pattern_selector",
+            properties -> new TianshuPatternSelectorItem(ModBlocks.TIANSHU_PATTERN_SELECTOR.get(), properties),
+            new Item.Properties());
+    public static final DeferredItem<AllPatternGeneratorItem> ALL_PATTERN_GENERATOR = ITEMS.registerItem(
+            "all_pattern_generator", AllPatternGeneratorItem::new, new Item.Properties().stacksTo(1));
+    public static final DeferredItem<AggregatePatternItem> AGGREGATE_PATTERN = ITEMS.registerItem(
+            "aggregate_pattern", AggregatePatternItem::new, new Item.Properties().stacksTo(1));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MAIN_TAB = TABS.register("main", () ->
             CreativeModeTab.builder()
@@ -29,6 +40,8 @@ public final class ModItems {
                     .displayItems((parameters, output) -> {
                         output.accept(PATTERN_BINDER.get());
                         output.accept(PATTERN_LINKER.get());
+                        output.accept(TIANSHU_PATTERN_SELECTOR.get());
+                        output.accept(ALL_PATTERN_GENERATOR.get());
                     })
                     .build());
 

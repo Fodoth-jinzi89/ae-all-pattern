@@ -11,6 +11,7 @@ run-data/
 .project
 .settings/
 .vscode/
+.hmcl/
 .DS_Store
 crash-reports/
 logs/

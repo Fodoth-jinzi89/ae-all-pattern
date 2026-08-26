@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "bonus_rolls": 0.0,
+      "conditions": [
+        {
+          "condition": "minecraft:survives_explosion"
+        }
+      ],
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "aeallpattern:tianshu_pattern_selector"
+        }
+      ],
+      "rolls": 1.0
+    }
+  ],
+  "random_sequence": "aeallpattern:blocks/tianshu_pattern_selector"
+}

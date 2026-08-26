@@ -29,6 +29,37 @@ class ModResourcesTest {
     }
 
     @Test
+    void aggregatePatternItemsHaveModelsAndGeneratorRecipe() {
+        for (String relative : List.of(
+                "assets/aeallpattern/models/item/all_pattern_generator.json",
+                "assets/aeallpattern/models/item/aggregate_pattern.json",
+                "data/aeallpattern/recipe/all_pattern_generator.json",
+                "aeallpattern.mixins.json")) {
+            assertTrue(Files.isRegularFile(RESOURCES.resolve(relative)), () -> "missing resource: " + relative);
+        }
+    }
+
+    @Test
+    void tianshuSelectorHasTheCompleteBlockResourceChain() throws IOException {
+        for (String relative : List.of(
+                "assets/aeallpattern/blockstates/tianshu_pattern_selector.json",
+                "assets/aeallpattern/models/block/tianshu_pattern_selector.json",
+                "assets/aeallpattern/models/block/tianshu_pattern_selector_active.json",
+                "assets/aeallpattern/models/item/tianshu_pattern_selector.json",
+                "data/aeallpattern/loot_table/blocks/tianshu_pattern_selector.json")) {
+            assertTrue(Files.isRegularFile(RESOURCES.resolve(relative)), () -> "missing resource: " + relative);
+        }
+        for (String relative : List.of(
+                "assets/aeallpattern/textures/block/tianshu/tianshu_pattern_selector.png",
+                "assets/aeallpattern/textures/block/tianshu/tianshu_pattern_selector_active.png")) {
+            BufferedImage image = ImageIO.read(RESOURCES.resolve(relative).toFile());
+            assertEquals(64, image.getWidth(), () -> "unexpected texture width: " + relative);
+            assertEquals(64, image.getHeight(), () -> "unexpected texture height: " + relative);
+            assertTrue(image.getColorModel().hasAlpha(), () -> "texture must retain alpha: " + relative);
+        }
+    }
+
+    @Test
     void allOwnedJsonResourcesParse() throws IOException {
         try (var paths = Files.walk(RESOURCES)) {
             for (Path path : paths.filter(file -> file.toString().endsWith(".json")).toList()) {

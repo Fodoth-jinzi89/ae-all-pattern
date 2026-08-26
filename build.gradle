@@ -18,6 +18,13 @@ repositories {
     mavenCentral()
     maven { url = 'https://modmaven.dev/' }
     maven { url = 'https://maven.blamejared.com' }
+    // The public endpoint redirects binary artifacts into /releases. Pointing
+    // Gradle there directly avoids resolving only the POM without the mod JAR.
+    maven { url = 'https://maven.blakesmods.com/releases' }
+    maven {
+        url = 'https://www.cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
 }
 
 neoForge {
@@ -98,6 +105,11 @@ dependencies {
     // AE2 is required and supplies the public crafting-provider API.
     implementation "org.appliedenergistics:appliedenergistics2:${ae2_version}"
 
+    // Exact core revision used by AE2 Lightning Tech's former single-block
+    // time-wheel CPU. This supplies the optimized planner and virtual CPU pool.
+    implementation "com.moakiee.thunderbolt:thunderbolt:1.0.0"
+    jarJar "com.moakiee.thunderbolt:thunderbolt:1.0.0"
+
     // Mekanism is optional. Keep its classes out of common signatures and load adapters conditionally.
     compileOnly "mekanism:Mekanism:${mekanism_version}:api"
     if (project.property('runtime_mekanism').toBoolean()) {
@@ -108,6 +120,25 @@ dependencies {
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
     if (project.property('runtime_jei').toBoolean()) {
         localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+        localRuntime "curse.maven:ae2-jei-integration-1074338:${ae2_jei_integration_file_id}"
+    }
+
+    // Reuse AE's extensible JEI converter registry. Applied Mekanistics adds
+    // Mekanism chemicals to that same registry and owns their transport logic.
+    compileOnly "curse.maven:ae2-jei-integration-1074338:${ae2_jei_integration_file_id}"
+    compileOnly "curse.maven:applied-mekanistics-574300:${applied_mekanistics_file_id}"
+    if (project.property('runtime_jei').toBoolean()
+            && project.property('runtime_mekanism').toBoolean()) {
+        localRuntime "curse.maven:applied-mekanistics-574300:${applied_mekanistics_file_id}"
+    }
+
+    // Runtime-only generic JEI compatibility fixture. No Mystical Agriculture
+    // classes are referenced by the implementation.
+    if (project.property('runtime_mystical_agriculture').toBoolean()) {
+        // Their published POMs contain no packaging metadata, so request the
+        // binary artifacts explicitly for the development runtime fixture.
+        localRuntime "com.blakebr0.cucumber:Cucumber:${cucumber_version}@jar"
+        localRuntime "com.blakebr0.mysticalagriculture:MysticalAgriculture:${mystical_agriculture_version}@jar"
     }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
@@ -152,6 +183,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             mod_credits            : mod_credits,
             mod_version            : mod_version,
             ae2_version_range      : ae2_version_range,
+            thunderbolt_version_range: thunderbolt_version_range,
             mekanism_version_range : mekanism_version_range,
     ]
     inputs.properties replaceProperties
@@ -204,7 +236,10 @@ def verifyReleaseJar = tasks.register('verifyReleaseJar') {
                     'META-INF/NOTICE.md',
                     'icon.png',
                     'assets/aeallpattern/textures/item/pattern_binder.png',
-                    'assets/aeallpattern/textures/block/pattern_linker.png']) {
+                    'assets/aeallpattern/textures/block/pattern_linker.png',
+                    'assets/aeallpattern/textures/block/tianshu/tianshu_pattern_selector.png',
+                    'assets/aeallpattern/models/block/tianshu_pattern_selector.json',
+                    'META-INF/jarjar/metadata.json']) {
                 if (!names.contains(required)) {
                     throw new GradleException("Release JAR is missing ${required}")
                 }

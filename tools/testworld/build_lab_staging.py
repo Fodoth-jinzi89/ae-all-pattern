@@ -51,19 +51,21 @@ def build_commands() -> list[str]:
         "fill -22 4 12 22 4 22 minecraft:cyan_concrete replace",
         "setworldspawn 0 5 -14",
         "forceload add -24 -18 24 24",
-        sign(0, 5, -15, "AE All Pattern", "0.1.0 Test Lab", "Creative + Peaceful", "Read guide file"),
-        sign(-16, 5, -11, "PURPLE ZONE", "AE2 core", "Linker + CPU", "Supplies nearby"),
-        sign(-16, 5, 3, "ORANGE ZONE", "Vanilla furnaces", "Fuel included", "AE auto-return"),
-        sign(-16, 5, 11, "CYAN ZONE", "Mekanism", "Singles + factories", "Creative power"),
-        sign(14, 5, -7, "DIAGNOSTICS", "/aeallpattern status", "/aeallpattern perf", "/reload"),
-        sign(14, 5, -3, "STRESS PACK", "1000 smelting", "recipe files", "reload + perf"),
+        sign(0, 5, -15, "全样板测试场", "版本 0.1.0", "创造模式 · 和平", "从紫色区域开始"),
+        sign(-16, 5, -11, "紫色区域", "AE2 主网络", "链接器 + 合成 CPU", "原料已存入 AE"),
+        sign(-16, 5, 3, "橙色区域", "原版熔炉组", "燃料已经放入", "产物自动回收"),
+        sign(-16, 5, 11, "青色区域", "通用机械", "单机 + 工厂", "能量立方向上弹出"),
+        sign(14, 5, -7, "诊断区域", "/aeallpattern status", "/aeallpattern perf", "/reload"),
+        sign(14, 5, -3, "压力配方包", "1000 个熔炼配方", "用于重载测试", "重载后检查性能"),
         # AE2 core and a compact 2x2 crafting CPU.
         "setblock 0 5 -5 ae2:controller replace",
         "setblock -1 5 -5 ae2:creative_energy_cell replace",
-        "setblock 1 5 -5 ae2:drive replace",
-        "data merge block 1 5 -5 {inv:{item0:{id:\"ae2:item_storage_cell_64k\",count:1}}}",
-        "setblock 0 6 -5 ae2:cable_bus{cable:{id:\"ae2:fluix_glass_cable\"},north:{id:\"ae2:crafting_terminal\"}} replace",
-        "setblock 1 6 -5 ae2:cable_bus{cable:{id:\"ae2:fluix_glass_cable\"},north:{id:\"ae2:pattern_encoding_terminal\"}} replace",
+        "setblock 1 5 -5 ae2:drive{inv:{item0:{id:\"ae2:item_storage_cell_64k\",count:1}}} replace",
+        "setblock -1 6 -5 ae2:cable_bus{cable:{id:\"ae2:fluix_glass_cable\"},south:{id:\"ae2:terminal\",enabledKeyTypes:[\"ae2:i\",\"ae2:f\"]}} replace",
+        "setblock 0 6 -5 ae2:cable_bus{cable:{id:\"ae2:fluix_glass_cable\"},south:{id:\"ae2:crafting_terminal\",enabledKeyTypes:[\"ae2:i\",\"ae2:f\"]}} replace",
+        "setblock 1 6 -5 ae2:cable_bus{cable:{id:\"ae2:fluix_glass_cable\"},south:{id:\"ae2:pattern_encoding_terminal\",enabledKeyTypes:[\"ae2:i\",\"ae2:f\"]}} replace",
+        "setblock 2 6 -5 ae2:cable_bus{cable:{id:\"ae2:fluix_glass_cable\"},south:{id:\"ae2:pattern_access_terminal\",enabledKeyTypes:[\"ae2:i\",\"ae2:f\"]}} replace",
+        "setblock -1 5 -4 minecraft:air replace",
         "setblock 0 5 -4 aeallpattern:pattern_linker replace",
         "setblock 0 5 -6 ae2:1k_crafting_storage replace",
         "setblock 1 5 -6 ae2:crafting_unit replace",
@@ -72,9 +74,9 @@ def build_commands() -> list[str]:
         "setblock 2 5 -5 ae2:molecular_assembler replace",
         "setblock 2 5 -6 ae2:interface replace",
         "setblock -2 5 -5 ae2:pattern_provider replace",
-        sign(0, 7, -7, "AE CORE", "2 terminals ready", "Linker uses channel", "CPU + 64k drive"),
-        sign(-7, 5, -7, "STEP 1", "Take binder", "Right-click linker", "No sneak"),
-        sign(7, 5, -7, "STEP 2", "Sneak-right-click", "a machine input", "within 64 blocks"),
+        sign(0, 7, -7, "AE 主网络", "4 种终端朝南", "原料写入 64K", "CPU + 存储磁盘"),
+        sign(-7, 5, -7, "步骤一", "从木桶拿绑定器", "右击紫色链接器", "不要潜行"),
+        sign(7, 5, -7, "步骤二", "潜行右击机器", "可连续绑定多台", "有效距离 64 格"),
     ]
 
     barrel(commands, -5, 5, -5, [
@@ -91,20 +93,46 @@ def build_commands() -> list[str]:
         ("ae2:item_storage_cell_64k", 1),
         ("ae2:controller", 8),
         ("ae2:creative_energy_cell", 8),
+        ("ae2:terminal", 2),
+        ("ae2:pattern_access_terminal", 2),
     ])
+
+    # This is a manual backup supply. The seed function writes the real test
+    # inventory directly into the 64K cell so terminal visibility does not
+    # depend on an external-storage channel or side configuration.
+    barrel(commands, -1, 5, -3, [
+        ("minecraft:raw_iron", 16),
+        ("minecraft:raw_gold", 16),
+        ("minecraft:raw_copper", 16),
+        ("minecraft:cobblestone", 16),
+        ("minecraft:beef", 16),
+        ("minecraft:potato", 16),
+        ("minecraft:redstone", 16),
+        ("minecraft:quartz", 16),
+        ("minecraft:diamond", 8),
+        ("minecraft:oak_log", 16),
+        ("minecraft:stone_bricks", 16),
+        ("mekanism:raw_osmium", 16),
+        ("mekanism:raw_tin", 16),
+        ("mekanism:raw_lead", 16),
+        ("mysticalagriculture:prosperity_seed_base", 16),
+        ("mysticalagriculture:inferium_essence", 64),
+        ("mysticalagriculture:tertium_essence", 32),
+    ])
+    commands.append(sign(-1, 6, -3, "备用原料仓", "仅供手动取用", "预存物品在磁盘", "不接存储总线"))
 
     # Vanilla stations. Hopper below each machine demonstrates deterministic output extraction.
     vanilla = [
-        (-12, "minecraft:furnace", "FURNACE"),
-        (-6, "minecraft:blast_furnace", "BLAST FURNACE"),
-        (0, "minecraft:smoker", "SMOKER"),
+        (-12, "minecraft:furnace", "熔炉"),
+        (-6, "minecraft:blast_furnace", "高炉"),
+        (0, "minecraft:smoker", "烟熏炉"),
     ]
     for x, block, label in vanilla:
         commands.extend([
             f"setblock {x} 6 7 {block}[facing=south] replace",
             f"setblock {x} 5 7 minecraft:smooth_stone replace",
             f"item replace block {x} 6 7 container.1 with minecraft:coal 64",
-            sign(x, 7, 6, label, "Bind any face", "Fuel preloaded", "Auto-return to ME"),
+            sign(x, 7, 6, label, "绑定任意有效面", "燃料已经放入", "产物自动回到 AE"),
         ])
     barrel(commands, 6, 5, 7, [
         ("minecraft:raw_iron", 64),
@@ -119,30 +147,31 @@ def build_commands() -> list[str]:
 
     # Mekanism single machines and matching basic factories, each on creative power.
     mekanism_rows = [
-        (-12, "mekanism:energized_smelter", "SMELTER"),
-        (-6, "mekanism:crusher", "CRUSHER"),
-        (0, "mekanism:enrichment_chamber", "ENRICHER"),
+        (-12, "mekanism:energized_smelter", "充能冶炼炉"),
+        (-6, "mekanism:crusher", "粉碎机"),
+        (0, "mekanism:enrichment_chamber", "富集仓"),
     ]
     for x, block, label in mekanism_rows:
         commands.extend([
-            f"setblock {x} 5 15 mekanism:creative_energy_cube replace",
-            f"data merge block {x} 5 15 {{energy_containers:[{{container:0b,stored:9223372036854775807L}}]}}",
+            f"setblock {x} 5 15 mekanism:creative_energy_cube[facing=up] replace",
+            f"data merge block {x} 5 15 {{component_config:{{eject0:1b,config0:[I;4,0,0,0,0,0]}},energy_containers:[{{container:0b,stored:9223372036854775807L}}]}}",
             f"setblock {x} 6 15 {block} replace",
-            f"data merge block {x} 6 15 {{energy_containers:[{{container:0b,stored:9223372036854775807L}}]}}",
-            sign(x, 7, 14, label, "Precharged", "Bind any face", "Auto-return to ME"),
+            f"data merge block {x} 6 15 {{component_config:{{config0:[I;1,1,1,1,1,1]}}}}",
+            sign(x, 7, 14, label, "能量立方向上弹出", "绑定任意有效面", "产物自动回到 AE"),
         ])
     factories = [
-        (-12, "mekanism:basic_smelting_factory", "SMELT FACTORY"),
-        (-6, "mekanism:basic_crushing_factory", "CRUSH FACTORY"),
-        (0, "mekanism:basic_enriching_factory", "ENRICH FACTORY"),
+        (-12, "mekanism:basic_smelting_factory", "基础冶炼工厂"),
+        (-6, "mekanism:basic_crushing_factory", "基础粉碎工厂"),
+        (0, "mekanism:basic_enriching_factory", "基础富集工厂"),
+        (6, "mekanism:basic_infusing_factory", "基础灌注工厂"),
     ]
     for x, block, label in factories:
         commands.extend([
-            f"setblock {x} 5 20 mekanism:creative_energy_cube replace",
-            f"data merge block {x} 5 20 {{energy_containers:[{{container:0b,stored:9223372036854775807L}}]}}",
+            f"setblock {x} 5 20 mekanism:creative_energy_cube[facing=up] replace",
+            f"data merge block {x} 5 20 {{component_config:{{eject0:1b,config0:[I;4,0,0,0,0,0]}},energy_containers:[{{container:0b,stored:9223372036854775807L}}]}}",
             f"setblock {x} 6 20 {block} replace",
-            f"data merge block {x} 6 20 {{energy_containers:[{{container:0b,stored:9223372036854775807L}}]}}",
-            sign(x, 7, 19, label, "Precharged", "Bind any face", "Auto-return to ME"),
+            f"data merge block {x} 6 20 {{component_config:{{config0:[I;1,1,1,1,1,1]}}}}",
+            sign(x, 7, 19, label, "能量立方向上弹出", "绑定任意有效面", "产物自动回到 AE"),
         ])
     barrel(commands, 6, 5, 15, [
         ("minecraft:raw_iron", 64),
@@ -156,18 +185,36 @@ def build_commands() -> list[str]:
         ("mekanism:raw_lead", 64),
         ("mekanism:configurator", 1),
     ])
+    # This multiblock is deliberately discovered through its JEI catalyst.
+    # No Mystical Agriculture class or machine whitelist is used by the mod.
     commands.extend([
-        sign(13, 5, 12, "CHECKLIST", "Bind + purple box", "Craft + return", "Restart + reload"),
+        "setblock 14 6 18 mysticalagriculture:infusion_altar replace",
+        "setblock 12 6 16 mysticalagriculture:infusion_pedestal replace",
+        "setblock 14 6 16 mysticalagriculture:infusion_pedestal replace",
+        "setblock 16 6 16 mysticalagriculture:infusion_pedestal replace",
+        "setblock 12 6 18 mysticalagriculture:infusion_pedestal replace",
+        "setblock 16 6 18 mysticalagriculture:infusion_pedestal replace",
+        "setblock 12 6 20 mysticalagriculture:infusion_pedestal replace",
+        "setblock 14 6 20 mysticalagriculture:infusion_pedestal replace",
+        "setblock 16 6 20 mysticalagriculture:infusion_pedestal replace",
+        sign(14, 7, 14, "神秘农业注魔祭坛", "潜行右击中央祭坛", "由 JEI 通用扫描", "无机器白名单"),
+    ])
+    commands.extend([
+        sign(8, 5, 5, "推荐配方一", "粗铁 → 铁锭", "粗金 → 金锭", "从合成终端下单"),
+        sign(12, 5, 5, "推荐配方二", "牛肉 → 熟牛排", "马铃薯 → 烤马铃薯", "使用烟熏炉"),
+        sign(8, 5, 13, "推荐配方三", "圆石 → 沙砾", "粗锇 → 锇粉×2", "尝试粉碎与富集"),
+        sign(13, 5, 12, "测试清单", "生成聚合样版", "放入样板供应器", "重启后再次测试"),
         "setblock 14 5 2 minecraft:command_block{Command:\"aeallpattern perf\",auto:0b} replace",
         "setblock 14 6 2 minecraft:stone_button[face=floor] replace",
         "setblock 18 5 2 minecraft:command_block{Command:\"reload\",auto:0b} replace",
         "setblock 18 6 2 minecraft:stone_button[face=floor] replace",
-        sign(14, 5, 1, "PERF BUTTON", "Runs diagnostics", "Output in chat/log"),
-        sign(18, 5, 1, "RELOAD BUTTON", "Reload datapacks", "Catalog generation", "must increment"),
+        sign(14, 5, 1, "性能诊断按钮", "执行性能诊断", "结果显示在聊天栏", "并写入日志"),
+        sign(18, 5, 1, "重载按钮", "重新加载数据包", "配方目录代数", "应当增加一次"),
         "spawnpoint @a 0 5 -14",
         "gamemode creative @a",
         "effect give @a minecraft:night_vision infinite 0 true",
-        "tellraw @a {\"text\":\"AE All Pattern 0.1.0 test lab generated. Read AE_ALL_PATTERN_TEST_GUIDE.md in the save folder.\",\"color\":\"light_purple\"}",
+        "schedule function aeallpattern_test:seed 2s replace",
+        "tellraw @a {\"text\":\"全样板 0.1.0 中文测试场已准备完成。请从紫色区域开始测试。\",\"color\":\"light_purple\"}",
     ])
     return commands
 
@@ -195,6 +242,12 @@ def main() -> None:
     function_path = pack / "data" / NAMESPACE / "function" / "build.mcfunction"
     function_path.parent.mkdir(parents=True, exist_ok=True)
     function_path.write_text("\n".join(build_commands()) + "\n", encoding="utf-8")
+    seed_function_path = pack / "data" / NAMESPACE / "function" / "seed.mcfunction"
+    seed_function_path.write_text(
+        "aeallpattern seed-test-materials 0 5 -4\n"
+        "tellraw @a {\"text\":\"AE 预存原料已经写入 64K 存储元件。\",\"color\":\"aqua\"}\n",
+        encoding="utf-8",
+    )
 
     recipe_dir = pack / "data" / NAMESPACE / "recipe"
     for index in range(1000):
@@ -215,37 +268,44 @@ def main() -> None:
         "cookingtime": 40,
     })
 
-    guide = """# AE All Pattern 0.1.0 Test Lab
+    guide = """# AE All Pattern 0.1.0 中文测试场
 
-Generated for Minecraft 1.21.1 / NeoForge 21.1.219 / AE2 19.2.17 / Mekanism 10.7.19.
+适用版本：Minecraft 1.21.1 / NeoForge 21.1.219 / AE2 19.2.17 / Mekanism 10.7.19 / Mystical Agriculture 8.0.27。
 
-## First use
+## 第一次使用
 
-1. Open the world in Creative mode and walk to the purple AE2 zone.
-2. Take the All Pattern Binder from the supply barrel.
-3. Right-click the powered All Pattern Linker without sneaking.
-4. Sneak-right-click any face of a supported machine. The adapter prefers that face and safely finds a valid item input when needed.
-5. Confirm the purple outline and inspect craftable items in an AE2 crafting terminal.
-6. The linker continuously drains every stack exposed by the bound machine's output capability into the same ME network.
+1. 进入存档后前往紫色 AE2 区域。
+2. 从补给木桶取出“全样板绑定器”。
+3. 不潜行，右击已供电的“全样板链接器”。
+4. 潜行右击受支持机器的输入面；选择不会清空，可以继续绑定其他机器，机器周围会出现紫色立体框架。
+5. 打开朝南摆放的 ME 合成终端，在可合成项目中选择输出并下单。
+6. 链接器会强制接管输入，并将机器可抽取的全部产物自动送回同一个 ME 网络。
 
-## Stations
+## 已准备设备
 
-- Purple: powered AE2 controller, linker, installed 64k storage cell, ready-to-use crafting and pattern encoding terminals, compact crafting CPU, assembler, interface, and supplies.
-- Orange: furnace, blast furnace, smoker, preloaded fuels, inputs, and unobstructed outputs for Linker auto-return.
-- Cyan: energized smelter, crusher, enrichment chamber, their basic factories, precharged power, and materials.
-- Gray diagnostics: `/aeallpattern status`, `/aeallpattern perf`, and `/reload` buttons.
+- 紫色区域：AE2 控制器、创造能源元件、64K 存储元件、链接器、合成 CPU、分子装配室、接口、样板供应器，以及朝南摆放的 ME 终端、ME 合成终端、ME 样板编码终端和 ME 样板管理终端。
+- AE 预存原料：包含原版、通用机械和神秘农业测试材料，已直接写入 64K 存储元件；旁边的原料木桶仅供手动取用，不连接存储总线。
+- 橙色区域：熔炉、高炉、烟熏炉，燃料已经放入。
+- 青色区域：充能冶炼炉、粉碎机、富集仓、基础灌注工厂，以及神秘农业完整注魔祭坛；全部通过 JEI 催化剂通用扫描，不使用生成器白名单。
+- 灰色区域：`/aeallpattern status`、`/aeallpattern perf` 和 `/reload` 诊断按钮。
 
-## Required checks
+## 推荐测试配方
 
-- Binding survives save/restart and disappears on unbind.
-- Missing channel/power stops publication.
-- Replacing a machine safely invalidates its route.
-- Blocked input keeps ownership in the linker; unbinding or breaking it recovers queued material.
-- A full ME drive leaves completed output in the machine; recovery retries after storage becomes available.
-- `/reload` increases recipe generation once and does not create duplicate virtual patterns.
-- The 1000 duplicate stress recipes load but collapse safely through deterministic filtering.
+- 粗铁 → 铁锭；粗金 → 金锭；粗铜 → 铜锭。
+- 牛肉 → 熟牛排；马铃薯 → 烤马铃薯。
+- 圆石 → 沙砾；粗锇 → 锇粉；也可尝试粗锡、粗铅和红石相关富集配方。
 
-KubeJS is not bundled. Use the included datapack reload probe for this dependency matrix.
+## 必测项目
+
+- 绑定在保存和重启后仍然存在，解绑后消失。
+- 缺少频道或能源时停止发布虚拟样板。
+- 替换机器后旧路线安全失效。
+- 输入堵塞时原料仍由链接器持有；解绑或破坏链接器时能够回收。
+- ME 存储已满时，产物留在机器内；恢复容量后继续自动回收。
+- `/reload` 只增加一次目录代数，不产生重复虚拟样板。
+- 1000 条压力配方能够加载，并被确定性去重逻辑安全折叠。
+
+本环境不包含 KubeJS；数据包重载探针用于当前依赖组合的重载测试。
 """
     (world / "AE_ALL_PATTERN_TEST_GUIDE.md").write_text(guide, encoding="utf-8")
     write_json(world / "lab-plan.json", {

@@ -135,6 +135,11 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
             }
             var catalog = RecipeIndexService.catalog(targetLevel, target, adapter.get());
             for (RecipeSnapshot recipe : catalog.recipes()) {
+                // The linker queue is intentionally lossless but currently owns one input stack.
+                // Multi-input recipes are published by aggregate patterns in a normal AE provider.
+                if (recipe.inputs().size() != 1) {
+                    continue;
+                }
                 BindingPatternKey patternKey = new BindingPatternKey(binding.bindingId(), recipe.fingerprint());
                 ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
                         List.of(GenericStack.fromItemStack(recipe.input())),

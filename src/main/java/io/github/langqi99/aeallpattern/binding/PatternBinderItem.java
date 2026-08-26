@@ -137,7 +137,6 @@ public final class PatternBinderItem extends Item {
         if (existing.isPresent()) {
             linker.cancelBinding(existing.get().bindingId());
             data.remove(existing.get().bindingId());
-            binder.remove(ModDataComponents.ANCHOR_SELECTION.get());
             linker.refreshPatterns();
             if (player instanceof ServerPlayer serverPlayer) {
                 BindingSyncService.send(serverPlayer);
@@ -161,7 +160,6 @@ public final class PatternBinderItem extends Item {
                 gameTime,
                 gameTime);
         data.put(record);
-        binder.remove(ModDataComponents.ANCHOR_SELECTION.get());
         linker.refreshPatterns();
         if (player instanceof ServerPlayer serverPlayer) {
             BindingSyncService.send(serverPlayer);
@@ -184,6 +182,7 @@ public final class PatternBinderItem extends Item {
                 "tooltip.aeallpattern.pattern_binder.selected",
                 selection.anchor().dimension().location().toString(),
                 pos.getX(), pos.getY(), pos.getZ()));
+        tooltip.add(Component.translatable("tooltip.aeallpattern.pattern_binder.continuous"));
     }
 
     @Override

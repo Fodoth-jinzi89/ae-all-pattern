@@ -8,9 +8,23 @@ public final class BindingNetwork {
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        event.registrar("1").playToClient(
+        var registrar = event.registrar("1");
+        registrar.playToClient(
                 BindingSyncPayload.TYPE,
                 BindingSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientBindingState.replace(payload.entries())));
+        registrar.playToClient(
+                AggregateMetadataPayload.TYPE,
+                AggregateMetadataPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        io.github.langqi99.aeallpattern.aggregate.AggregateMetadataView.replace(payload.entries())));
+        registrar.playToServer(
+                GenerateAggregatePayload.TYPE,
+                GenerateAggregatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof net.minecraft.server.level.ServerPlayer player) {
+                        AggregateGenerationService.handle(payload, player);
+                    }
+                }));
     }
 }

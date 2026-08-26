@@ -1,13 +1,14 @@
 package io.github.langqi99.aeallpattern.recipe;
 
 import java.util.Objects;
+import java.util.List;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 /** Immutable, concrete single-input recipe exposed to AE2. */
 public final class RecipeSnapshot {
     private final ResourceLocation recipeId;
-    private final ItemStack input;
+    private final List<ItemStack> inputs;
     private final ItemStack output;
     private final RecipeFingerprint fingerprint;
     private final int processingTicks;
@@ -18,8 +19,21 @@ public final class RecipeSnapshot {
             ItemStack output,
             RecipeFingerprint fingerprint,
             int processingTicks) {
+        this(recipeId, List.of(input), output, fingerprint, processingTicks);
+    }
+
+    public RecipeSnapshot(
+            ResourceLocation recipeId,
+            List<ItemStack> inputs,
+            ItemStack output,
+            RecipeFingerprint fingerprint,
+            int processingTicks) {
         this.recipeId = Objects.requireNonNull(recipeId, "recipeId");
-        this.input = requireStack(input, "input");
+        Objects.requireNonNull(inputs, "inputs");
+        if (inputs.isEmpty() || inputs.size() > 9) {
+            throw new IllegalArgumentException("recipe must have between 1 and 9 inputs");
+        }
+        this.inputs = inputs.stream().map(stack -> requireStack(stack, "input")).toList();
         this.output = requireStack(output, "output");
         this.fingerprint = Objects.requireNonNull(fingerprint, "fingerprint");
         this.processingTicks = Math.max(1, processingTicks);
@@ -30,7 +44,11 @@ public final class RecipeSnapshot {
     }
 
     public ItemStack input() {
-        return input.copy();
+        return inputs.getFirst().copy();
+    }
+
+    public List<ItemStack> inputs() {
+        return inputs.stream().map(ItemStack::copy).toList();
     }
 
     public ItemStack output() {
