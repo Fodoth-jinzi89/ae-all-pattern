@@ -18,9 +18,13 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
 
     private final Supplier<CraftingRoutePolicy> policy;
     private final Consumer<CraftingRoutePolicy> change;
+    private final float[] animatedRowY = new float[CraftingRoutePolicy.CRITERION_COUNT];
     private int dragFrom = -1;
     private int dragTo = -1;
     private int hoveredRow = -1;
+    private double dragMouseY;
+    private double dragGrabOffset;
+    private long lastRenderNanos;
 
     public RoutingPolicyEditor(
             int x,
@@ -32,51 +36,123 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
                 Component.translatable("gui.aeallpattern.routing.order"));
         this.policy = policy;
         this.change = change;
+        for (int row = 0; row < animatedRowY.length; row++) {
+            animatedRowY[row] = row * ROW_HEIGHT;
+        }
     }
 
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        hoveredRow = rowAt(mouseX, mouseY);
+        hoveredRow = dragFrom < 0 ? rowAt(mouseX, mouseY) : -1;
         CraftingRoutePolicy current = policy.get();
+        float blend = animationBlend();
+
         for (int row = 0; row < CraftingRoutePolicy.CRITERION_COUNT; row++) {
-            int criterion = current.criterionAt(row);
-            int rowY = getY() + row * ROW_HEIGHT;
-            boolean enabled = enabled(current, criterion);
-            boolean hovered = row == hoveredRow;
-            boolean dragging = row == dragFrom;
-            int background = dragging
-                    ? 0xFFD6C6E8
-                    : hovered ? 0xFFE7E7EE : enabled ? 0xFFC7C7D2 : 0xFFB8B8C3;
-            graphics.fill(getX(), rowY, getX() + width, rowY + ROW_HEIGHT - 1, background);
-            graphics.renderOutline(
-                    getX(), rowY, width, ROW_HEIGHT - 1,
-                    row == dragTo && dragFrom >= 0 ? 0xFFA85BE0 : 0xFF777789);
-
-            drawHandle(graphics, getX() + 4, rowY + 5, dragging ? 0xFFA85BE0 : 0xFFF4F4F7);
-            Icon icon = icon(current, criterion);
-            var blitter = icon.getBlitter().dest(getX() + 16, rowY).zOffset(3);
-            if (!enabled) {
-                blitter.opacity(0.45F);
+            if (row == dragFrom) {
+                continue;
             }
-            blitter.blit(graphics);
-
-            int textColor = enabled ? 0xFF303044 : 0xFF777784;
-            graphics.drawString(
-                    Minecraft.getInstance().font,
-                    criterionName(criterion),
-                    getX() + 35,
-                    rowY + 4,
-                    textColor,
-                    false);
-            Component value = criterionValue(current, criterion);
-            graphics.drawString(
-                    Minecraft.getInstance().font,
-                    value,
-                    getX() + width - 5 - Minecraft.getInstance().font.width(value),
-                    rowY + 4,
-                    textColor,
+            float target = previewRow(row) * ROW_HEIGHT;
+            animatedRowY[row] = approach(animatedRowY[row], target, blend);
+            renderRow(
+                    graphics,
+                    current,
+                    row,
+                    getY() + Math.round(animatedRowY[row]),
+                    row == hoveredRow,
                     false);
         }
+
+        if (dragFrom >= 0) {
+            int slotY = getY() + dragTo * ROW_HEIGHT;
+            graphics.fill(getX() + 1, slotY, getX() + width - 1, slotY + ROW_HEIGHT - 1, 0x553C174F);
+            graphics.renderOutline(getX(), slotY, width, ROW_HEIGHT - 1, 0xFFA85BE0);
+
+            float target = (float) Math.max(
+                    0,
+                    Math.min(
+                            (CraftingRoutePolicy.CRITERION_COUNT - 1) * ROW_HEIGHT,
+                            dragMouseY - getY() - dragGrabOffset));
+            animatedRowY[dragFrom] = target;
+            int floatingY = getY() + Math.round(target);
+            graphics.fill(
+                    getX() + 3,
+                    floatingY + 3,
+                    getX() + width + 3,
+                    floatingY + ROW_HEIGHT + 2,
+                    0x66000000);
+            renderRow(graphics, current, dragFrom, floatingY, false, true);
+        }
+    }
+
+    private void renderRow(
+            GuiGraphics graphics,
+            CraftingRoutePolicy current,
+            int policyRow,
+            int rowY,
+            boolean hovered,
+            boolean dragging) {
+        int criterion = current.criterionAt(policyRow);
+        boolean enabled = enabled(current, criterion);
+        int background = dragging
+                ? 0xFFE1D2EF
+                : hovered ? 0xFFE7E7EE : enabled ? 0xFFC7C7D2 : 0xFFB8B8C3;
+        graphics.fill(getX(), rowY, getX() + width, rowY + ROW_HEIGHT - 1, background);
+        graphics.renderOutline(
+                getX(), rowY, width, ROW_HEIGHT - 1,
+                dragging ? 0xFFA85BE0 : 0xFF777789);
+
+        drawHandle(graphics, getX() + 4, rowY + 5, dragging ? 0xFFA85BE0 : 0xFFF4F4F7);
+        Icon icon = icon(current, criterion);
+        var blitter = icon.getBlitter().dest(getX() + 16, rowY).zOffset(dragging ? 8 : 3);
+        if (!enabled) {
+            blitter.opacity(0.45F);
+        }
+        blitter.blit(graphics);
+
+        int textColor = enabled ? 0xFF303044 : 0xFF777784;
+        graphics.drawString(
+                Minecraft.getInstance().font,
+                criterionName(criterion),
+                getX() + 35,
+                rowY + 4,
+                textColor,
+                false);
+        Component value = criterionValue(current, criterion);
+        graphics.drawString(
+                Minecraft.getInstance().font,
+                value,
+                getX() + width - 5 - Minecraft.getInstance().font.width(value),
+                rowY + 4,
+                textColor,
+                false);
+    }
+
+    private int previewRow(int row) {
+        if (dragFrom < 0 || dragFrom == dragTo) {
+            return row;
+        }
+        if (dragFrom < dragTo && row > dragFrom && row <= dragTo) {
+            return row - 1;
+        }
+        if (dragFrom > dragTo && row >= dragTo && row < dragFrom) {
+            return row + 1;
+        }
+        return row;
+    }
+
+    private float animationBlend() {
+        long now = System.nanoTime();
+        if (lastRenderNanos == 0L) {
+            lastRenderNanos = now;
+            return 1.0F;
+        }
+        float elapsed = Math.min(0.05F, (now - lastRenderNanos) / 1_000_000_000.0F);
+        lastRenderNanos = now;
+        return 1.0F - (float) Math.exp(-18.0F * elapsed);
+    }
+
+    private static float approach(float current, float target, float blend) {
+        return Math.abs(target - current) < 0.05F ? target : current + (target - current) * blend;
     }
 
     private static void drawHandle(GuiGraphics graphics, int x, int y, int color) {
@@ -131,6 +207,8 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
         }
         dragFrom = row;
         dragTo = row;
+        dragMouseY = mouseY;
+        dragGrabOffset = mouseY - (getY() + row * ROW_HEIGHT);
         return true;
     }
 
@@ -139,6 +217,7 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
         if (dragFrom < 0) {
             return false;
         }
+        dragMouseY = mouseY;
         dragTo = Math.max(0, Math.min(CraftingRoutePolicy.CRITERION_COUNT - 1,
                 (int) ((mouseY - getY()) / ROW_HEIGHT)));
         return true;
@@ -153,10 +232,26 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
         int to = dragTo;
         dragFrom = -1;
         dragTo = -1;
+        remapAnimationAfterMove(from, to);
         if (from != to) {
             change.accept(policy.get().moveCriterion(from, to));
         }
         return true;
+    }
+
+    private void remapAnimationAfterMove(int from, int to) {
+        float[] before = animatedRowY.clone();
+        if (from < to) {
+            for (int row = from; row < to; row++) {
+                animatedRowY[row] = before[row + 1];
+            }
+            animatedRowY[to] = before[from];
+        } else if (from > to) {
+            for (int row = from; row > to; row--) {
+                animatedRowY[row] = before[row - 1];
+            }
+            animatedRowY[to] = before[from];
+        }
     }
 
     private int rowAt(double mouseX, double mouseY) {

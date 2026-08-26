@@ -45,7 +45,7 @@ side="BOTH"
 [[dependencies.${mod_id}]]
 modId="thunderbolt"
 type="required"
-reason="Provides the optimized planner and time-wheel CPU runtime used by the Tianshu Pattern Selector."
+reason="Provides the optimized crafting planner and route-selection runtime used by the Tianshu Pattern Router."
 versionRange="${thunderbolt_version_range}"
 ordering="AFTER"
 side="BOTH"

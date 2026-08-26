@@ -29,10 +29,10 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 
 /**
- * Single-block host for the restored Tianshu time-wheel crafting CPU.
+ * Single-block controller for Tianshu's order planning and pattern routing.
  *
- * <p>Pattern selection is deliberately not exposed yet. This block currently
- * contributes only the optimized, shared-capacity crafting CPU runtime.</p>
+ * <p>It deliberately does not register as a crafting CPU. The selected route is
+ * executed by the normal AE crafting CPUs built by the player.</p>
  */
 public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
     public static final MapCodec<TianshuPatternSelectorBlock> CODEC =

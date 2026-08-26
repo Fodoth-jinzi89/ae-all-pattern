@@ -2,54 +2,36 @@ package io.github.langqi99.aeallpattern.tianshu;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.IManagedGridNode;
-import appeng.api.networking.security.IActionSource;
 import appeng.api.orientation.BlockOrientation;
 import appeng.api.util.AECableType;
 import appeng.blockentity.grid.AENetworkedBlockEntity;
-import appeng.hooks.ticking.TickHandler;
-import appeng.me.helpers.MachineSource;
-import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPool;
-import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolHost;
-import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolProvider;
 import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
 import io.github.langqi99.aeallpattern.registry.ModBlocks;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** Restored single-block host based on AE2 Lightning Tech's former test CPU. */
-public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEntity
-        implements TimeWheelCraftingCpuPoolHost, MenuProvider {
-    public static final long STORAGE_BYTES = Long.MAX_VALUE;
-    public static final int PARALLELISM = 16_384;
-
+/** Networked route-planning controller. Crafting execution remains the responsibility of normal AE CPUs. */
+public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEntity implements MenuProvider {
     private static final double IDLE_POWER_USAGE = 16.0D;
-    private static final String CPU_POOL_TAG = "CpuPool";
     private static final String ROUTING_POLICY_TAG = "RoutingPolicy";
 
-    private final IActionSource actionSource = new MachineSource(getMainNode()::getNode);
-    private final TimeWheelCraftingCpuPool cpuPool =
-            new TimeWheelCraftingCpuPool(this, STORAGE_BYTES, PARALLELISM);
-    private long lastCpuDirtyTick = Long.MIN_VALUE;
     private CraftingRoutePolicy routingPolicy = CraftingRoutePolicy.DEFAULT;
 
     public TianshuPatternSelectorBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.TIANSHU_PATTERN_SELECTOR.get(), pos, state);
-        getMainNode().addService(TimeWheelCraftingCpuPoolProvider.class, this);
     }
 
     @Override
@@ -70,33 +52,12 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
         return EnumSet.allOf(Direction.class);
     }
 
-    @Override
-    public TimeWheelCraftingCpuPool getTimeWheelCraftingCpuPool() {
-        return cpuPool;
-    }
-
-    @Override
-    public IActionSource getActionSource() {
-        return actionSource;
-    }
-
-    @Override
     public IGrid getGrid() {
         return getMainNode().getGrid();
     }
 
-    @Override
-    public boolean isCpuActive() {
+    public boolean isRouterOnline() {
         return getMainNode().isActive() && getMainNode().getGrid() != null;
-    }
-
-    @Override
-    public void markCpuDirty() {
-        long now = TickHandler.instance().getCurrentTick();
-        if (lastCpuDirtyTick != now) {
-            lastCpuDirtyTick = now;
-            saveChanges();
-        }
     }
 
     @Override
@@ -124,13 +85,6 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        if (cpuPool.hasPersistentState()) {
-            var poolTag = new CompoundTag();
-            cpuPool.writeToNBT(poolTag, registries);
-            if (!poolTag.isEmpty()) {
-                tag.put(CPU_POOL_TAG, poolTag);
-            }
-        }
         CompoundTag policyTag = new CompoundTag();
         policyTag.putInt("AggregatePriority", routingPolicy.aggregatePriority());
         policyTag.putBoolean("RequireFeasible", routingPolicy.requireFeasible());
@@ -145,9 +99,6 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
     @Override
     public void loadTag(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadTag(tag, registries);
-        if (tag.contains(CPU_POOL_TAG, CompoundTag.TAG_COMPOUND)) {
-            cpuPool.readFromNBT(tag.getCompound(CPU_POOL_TAG), registries);
-        }
         if (tag.contains(ROUTING_POLICY_TAG, CompoundTag.TAG_COMPOUND)) {
             CompoundTag policyTag = tag.getCompound(ROUTING_POLICY_TAG);
             routingPolicy = new CraftingRoutePolicy(
@@ -166,24 +117,6 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
     }
 
     @Override
-    public void onLoad() {
-        super.onLoad();
-        cpuPool.resolvePendingLoad();
-    }
-
-    @Override
-    public void addAdditionalDrops(Level level, BlockPos pos, List<ItemStack> drops) {
-        super.addAdditionalDrops(level, pos, drops);
-        cpuPool.addRemovalDrops(level, pos, drops);
-    }
-
-    @Override
-    public void clearContent() {
-        super.clearContent();
-        cpuPool.clearRemovedContent();
-    }
-
-    @Override
     protected Item getItemFromBlockEntity() {
         return ModBlocks.TIANSHU_PATTERN_SELECTOR.get().asItem();
     }
@@ -193,7 +126,7 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
             BlockPos pos,
             BlockState state,
             TianshuPatternSelectorBlockEntity selector) {
-        boolean active = selector.isCpuActive();
+        boolean active = selector.isRouterOnline();
         if (state.getValue(TianshuPatternSelectorBlock.ACTIVE) != active) {
             level.setBlock(pos, state.setValue(TianshuPatternSelectorBlock.ACTIVE, active), 3);
         }

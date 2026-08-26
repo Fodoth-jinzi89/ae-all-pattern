@@ -1,61 +1,59 @@
 package io.github.langqi99.aeallpattern.client;
 
 import appeng.client.gui.Icon;
-import appeng.client.gui.widgets.ITooltip;
+import appeng.client.gui.widgets.IconButton;
+import io.github.langqi99.aeallpattern.AeAllPattern;
 import java.util.List;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
-/** AE-style white icon button with an optional live value and right-click action. */
-public final class RoutingOptionButton extends Button implements ITooltip {
+/** Native AE toolbar button for the temporary route-policy popup. */
+public final class RoutingOptionButton extends IconButton {
+    private static final ResourceLocation ROUTE_ICON =
+            ResourceLocation.fromNamespaceAndPath(AeAllPattern.MOD_ID, "textures/gui/tianshu_route.png");
+
     private final Supplier<Icon> icon;
-    private final Supplier<Component> value;
     private final Supplier<List<Component>> tooltip;
     private final Runnable rightClick;
 
     public RoutingOptionButton(
-            int x,
-            int y,
-            int width,
             Supplier<Icon> icon,
-            Supplier<Component> value,
             OnPress onPress,
             Runnable rightClick,
             Supplier<List<Component>> tooltip) {
-        super(x, y, width, 20, Component.empty(), onPress, Button.DEFAULT_NARRATION);
+        super(onPress);
         this.icon = icon;
-        this.value = value;
         this.tooltip = tooltip;
         this.rightClick = rightClick;
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        int background = isHoveredOrFocused() ? 0xFFE4E4EC : 0xFFB7B7C5;
-        int border = active ? 0xFF4B4B60 : 0xFF747486;
-        graphics.fill(getX(), getY(), getX() + width, getY() + height, background);
-        graphics.renderOutline(getX(), getY(), width, height, border);
+    protected Icon getIcon() {
+        return icon.get();
+    }
 
-        var blitter = icon.get().getBlitter().dest(getX() + 2, getY() + 2).zOffset(3);
+    @Override
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        int hoverOffset = isHovered() ? 1 : 0;
+        Icon background = isHovered()
+                ? Icon.TOOLBAR_BUTTON_BACKGROUND_HOVER
+                : isFocused() ? Icon.TOOLBAR_BUTTON_BACKGROUND_FOCUS : Icon.TOOLBAR_BUTTON_BACKGROUND;
+        background.getBlitter()
+                .dest(getX() - 1, getY() + hoverOffset, 18, 20)
+                .zOffset(2)
+                .blit(graphics);
+
+        graphics.pose().pushPose();
+        graphics.pose().translate(0.0F, 0.0F, 3.0F);
         if (!active) {
-            blitter.opacity(0.55F);
+            graphics.setColor(1.0F, 1.0F, 1.0F, 0.45F);
         }
-        blitter.blit(graphics);
-
-        Component text = value.get();
-        if (text != null && !text.getString().isEmpty()) {
-            int color = active ? 0xFF303044 : 0xFF777784;
-            graphics.drawCenteredString(
-                    Minecraft.getInstance().font,
-                    text,
-                    getX() + 18 + Math.max(0, width - 18) / 2,
-                    getY() + 6,
-                    color);
-        }
+        graphics.blit(ROUTE_ICON, getX(), getY() + 1 + hoverOffset, 0.0F, 0.0F, 16, 16, 16, 16);
+        graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+        graphics.pose().popPose();
     }
 
     @Override
@@ -73,13 +71,4 @@ public final class RoutingOptionButton extends Button implements ITooltip {
         return tooltip.get();
     }
 
-    @Override
-    public Rect2i getTooltipArea() {
-        return new Rect2i(getX(), getY(), width, height);
-    }
-
-    @Override
-    public boolean isTooltipAreaVisible() {
-        return visible && !getTooltipMessage().isEmpty();
-    }
 }

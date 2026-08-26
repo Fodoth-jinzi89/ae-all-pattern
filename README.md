@@ -8,7 +8,7 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 
 **0.1.0 MVP 已完成。** 链接器是占用一个频道、消耗 2 AE/t 的真实 AE 节点；绑定器、世界持久化、紫色包围框、虚拟处理样板、安全输入缓冲、诊断命令和可选 Mekanism/JEI 集成都已实现。自动化测试同时覆盖只有 AE2 的最小专服和安装 JEI + Mekanism 的完整环境。
 
-“天枢样版选择器”的第一阶段也已接入：它恢复为一个可六面接入 AE 网络的单方块，提供无限合成存储、16384 并行时间轮 CPU 和 Thunderbolt 快速规划器。方块在线时会切换为发光模型；样版选择功能暂时明确留空，等待下一阶段在这个调度核心上实现。
+“天枢样版路由器”的第一阶段也已接入：它是一个可六面接入 AE 网络的单方块，提供 Thunderbolt 快速下单规划和动态样版路由，但不会向网络注册为合成 CPU。方块在线时会切换为发光模型；规划出的任务仍由玩家搭建的普通 AE 合成 CPU 执行。
 
 ## 目标交互
 
@@ -38,7 +38,7 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 | 加载器 | NeoForge 21.1.219+ |
 | Java | 21 |
 | Applied Energistics 2 | 19.2.17 |
-| Thunderbolt Core | 1.0.0 源码内嵌（时间轮 CPU / 快速规划） |
+| Thunderbolt Core | 1.0.0 源码内嵌（快速规划 / 动态路线选择） |
 | JEI | 可选，全样板生成器的通用配方发现 |
 | AE2 JEI Integration | 可选，把 JEI 原料类型转换为 AE 通用键 |
 | Mekanism | 可选，冶炼、粉碎、富集机器与工厂 |

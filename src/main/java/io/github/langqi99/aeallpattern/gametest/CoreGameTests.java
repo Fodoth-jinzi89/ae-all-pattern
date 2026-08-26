@@ -28,6 +28,7 @@ import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import io.github.langqi99.aeallpattern.tianshu.TianshuPatternSelectorBlock;
 import io.github.langqi99.aeallpattern.tianshu.TianshuPatternSelectorBlockEntity;
+import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingPolicies;
 import java.util.UUID;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +77,7 @@ public final class CoreGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 80)
-    public static void tianshuSelectorPublishesInfiniteTimeWheelCpu(GameTestHelper helper) {
+    public static void tianshuRouterPublishesRoutingWithoutCraftingCpu(GameTestHelper helper) {
         BlockPos selectorPos = new BlockPos(1, 1, 1);
         BlockPos energyPos = new BlockPos(1, 1, 2);
         helper.setBlock(selectorPos, ModBlocks.TIANSHU_PATTERN_SELECTOR.get());
@@ -84,23 +85,17 @@ public final class CoreGameTests {
 
         helper.runAfterDelay(10, () -> {
             TianshuPatternSelectorBlockEntity selector = helper.getBlockEntity(selectorPos);
-            helper.assertTrue(selector != null, "Tianshu selector block entity was not created");
-            helper.assertTrue(selector.isCpuActive(), "powered Tianshu selector did not come online");
-            helper.assertValueEqual(
-                    selector.getTimeWheelCraftingCpuPool().getAvailableStorage(),
-                    Long.MAX_VALUE,
-                    "Tianshu CPU storage is not infinite");
-            helper.assertValueEqual(
-                    selector.getTimeWheelCraftingCpuPool().getCoProcessors(),
-                    TianshuPatternSelectorBlockEntity.PARALLELISM,
-                    "Tianshu CPU parallelism changed");
+            helper.assertTrue(selector != null, "Tianshu router block entity was not created");
+            helper.assertTrue(selector.isRouterOnline(), "powered Tianshu router did not come online");
             helper.assertTrue(
-                    selector.getGrid().getCraftingService().getCpus()
-                            .contains(selector.getTimeWheelCraftingCpuPool()),
-                    "Thunderbolt did not publish the Tianshu CPU to AE2");
+                    selector.getGrid().getCraftingService().getCpus().isEmpty(),
+                    "Tianshu router must not register as an AE crafting CPU");
+            helper.assertTrue(
+                    TianshuRoutingPolicies.isAvailable(selector.getGrid()),
+                    "online Tianshu router was not discoverable by route planning");
             helper.assertTrue(
                     helper.getBlockState(selectorPos).getValue(TianshuPatternSelectorBlock.ACTIVE),
-                    "online Tianshu selector did not switch to its active model");
+                    "online Tianshu router did not switch to its active model");
             helper.succeed();
         });
     }
