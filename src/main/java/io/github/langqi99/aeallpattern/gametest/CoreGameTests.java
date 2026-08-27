@@ -3,17 +3,26 @@ package io.github.langqi99.aeallpattern.gametest;
 import appeng.api.networking.GridFlags;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.crafting.PatternDetailsHelper;
+import appeng.api.networking.IGridNode;
+import appeng.api.networking.crafting.CalculationStrategy;
+import appeng.api.networking.crafting.ICraftingPlan;
+import appeng.api.networking.crafting.ICraftingProvider;
+import appeng.api.networking.crafting.ICraftingSimulationRequester;
+import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
+import appeng.api.stacks.KeyCounter;
 import appeng.core.definitions.AEBlocks;
 import appeng.blockentity.crafting.PatternProviderBlockEntity;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternData;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternDecoder;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
+import io.github.langqi99.aeallpattern.aggregate.AggregateInputSlot;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternKind;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternLibrary;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternOptions;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternRef;
 import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
 import io.github.langqi99.aeallpattern.AeAllPattern;
@@ -29,10 +38,19 @@ import io.github.langqi99.aeallpattern.registry.ModItems;
 import io.github.langqi99.aeallpattern.tianshu.TianshuPatternSelectorBlock;
 import io.github.langqi99.aeallpattern.tianshu.TianshuPatternSelectorBlockEntity;
 import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingPolicies;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.ByproductPlanWarnings;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicyContext;
 import java.util.UUID;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -41,6 +59,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.material.Fluids;
@@ -98,6 +117,123 @@ public final class CoreGameTests {
                     "online Tianshu router did not switch to its active model");
             helper.succeed();
         });
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 100)
+    public static void byproductOrdersRequireQualificationAndPublishWarning(GameTestHelper helper) {
+        BlockPos routerPos = new BlockPos(1, 1, 1);
+        BlockPos energyPos = new BlockPos(1, 1, 2);
+        helper.setBlock(routerPos, ModBlocks.TIANSHU_PATTERN_SELECTOR.get());
+        helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
+
+        helper.runAfterDelay(10, () -> {
+            TianshuPatternSelectorBlockEntity router = helper.getBlockEntity(routerPos);
+            helper.assertTrue(router != null && router.isRouterOnline(),
+                    "powered Tianshu router did not come online");
+            ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
+                    List.of(GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE))),
+                    List.of(
+                            GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)),
+                            GenericStack.fromItemStack(new ItemStack(Items.EMERALD))));
+            IPatternDetails details = PatternDetailsHelper.decodePattern(encoded, helper.getLevel());
+            helper.assertTrue(details != null, "test processing pattern could not be decoded");
+
+            ICraftingProvider provider = new ICraftingProvider() {
+                @Override
+                public List<IPatternDetails> getAvailablePatterns() {
+                    return List.of(details);
+                }
+
+                @Override
+                public boolean pushPattern(IPatternDetails pattern, KeyCounter[] inputHolders) {
+                    return false;
+                }
+
+                @Override
+                public boolean isBusy() {
+                    return false;
+                }
+
+                @Override
+                public Set<appeng.api.stacks.AEKey> getEmitableItems() {
+                    return Set.of(AEItemKey.of(Items.COBBLESTONE));
+                }
+            };
+            var service = router.getGrid().getCraftingService();
+            service.addGlobalCraftingProvider(provider);
+            helper.assertFalse(service.isCraftable(AEItemKey.of(Items.EMERALD)),
+                    "secondary output was exposed while the qualification switch was disabled");
+
+            ICraftingSimulationRequester requester = new ICraftingSimulationRequester() {
+                @Override
+                public IActionSource getActionSource() {
+                    return IActionSource.ofMachine(router);
+                }
+
+                @Override
+                public IGridNode getGridNode() {
+                    return router.getMainNode().getNode();
+                }
+            };
+            Future<ICraftingPlan> blockedFuture = beginCalculation(
+                    service, helper, requester, CraftingRoutePolicy.DEFAULT, Items.EMERALD);
+            awaitPlan(helper, blockedFuture, blocked -> {
+                helper.assertTrue(blocked.patternTimes().isEmpty(),
+                        "disabled byproduct qualification still scheduled the whole recipe");
+                helper.assertTrue(ByproductPlanWarnings.get(blocked).isEmpty(),
+                        "disabled byproduct qualification unexpectedly published a warning");
+
+                Future<ICraftingPlan> allowedFuture = beginCalculation(
+                        service, helper, requester,
+                        CraftingRoutePolicy.DEFAULT.withByproductOrders(true), Items.EMERALD);
+                awaitPlan(helper, allowedFuture, allowed -> {
+                    helper.assertValueEqual(allowed.patternTimes().getOrDefault(details, 0L), 1L,
+                            "enabled byproduct qualification did not schedule the source recipe once");
+                    List<GenericStack> warning = ByproductPlanWarnings.get(allowed);
+                    helper.assertValueEqual(warning.size(), 1,
+                            "secondary-output route did not publish one extra-output warning");
+                    helper.assertTrue(warning.getFirst().what() instanceof AEItemKey key
+                                    && key.is(Items.DIAMOND) && warning.getFirst().amount() == 1,
+                            "secondary-output warning did not report the recipe's primary output");
+
+                    router.setRoutingPolicy(CraftingRoutePolicy.DEFAULT.withByproductOrders(true));
+                    helper.assertTrue(service.isCraftable(AEItemKey.of(Items.EMERALD)),
+                            "router default did not expose the secondary output in the crafting terminal");
+                    helper.succeed();
+                }, 0);
+            }, 0);
+        });
+    }
+
+    private static Future<ICraftingPlan> beginCalculation(
+            appeng.api.networking.crafting.ICraftingService service,
+            GameTestHelper helper,
+            ICraftingSimulationRequester requester,
+            CraftingRoutePolicy policy,
+            net.minecraft.world.item.Item output) {
+        return CraftingRoutePolicyContext.withPolicy(policy, () -> service.beginCraftingCalculation(
+                        helper.getLevel(), requester, AEItemKey.of(output), 1,
+                        CalculationStrategy.REPORT_MISSING_ITEMS));
+    }
+
+    private static void awaitPlan(
+            GameTestHelper helper,
+            Future<ICraftingPlan> future,
+            Consumer<ICraftingPlan> success,
+            int attempts) {
+        if (future.isDone()) {
+            try {
+                success.accept(future.get());
+            } catch (Exception error) {
+                helper.fail("byproduct route calculation failed: " + error);
+            }
+            return;
+        }
+        if (attempts >= 30) {
+            helper.fail("byproduct route calculation timed out");
+            return;
+        }
+        helper.runAfterDelay(2, () -> awaitPlan(helper, future, success, attempts + 1));
     }
 
     @GameTest(template = "empty", timeoutTicks = 80)
@@ -341,6 +477,162 @@ public final class CoreGameTests {
                 "machine recipe was not kept as an AE processing pattern");
         helper.assertValueEqual(delegateTypes.get(4), "AECraftingPattern",
                 "dynamic JEI recipe was not resolved to an AE crafting pattern");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void aggregateOptionsSplitEveryItemAndIgnoreOutputComponents(GameTestHelper helper) {
+        ItemStack namedOutput = new ItemStack(Items.EMERALD);
+        namedOutput.set(DataComponents.CUSTOM_NAME, net.minecraft.network.chat.Component.literal("Configured output"));
+        AggregateRecipe recipe = new AggregateRecipe(
+                "configured-processing-test",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "configured_processing_test"),
+                AggregatePatternKind.PROCESSING,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND, 3))),
+                List.of(GenericStack.fromItemStack(namedOutput)),
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "configured_test_machine"),
+                "block.aeallpattern.configured_test_machine", List.of(recipe));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+        aggregate.set(
+                ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get(),
+                new AggregatePatternOptions(true, true));
+
+        List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
+        helper.assertValueEqual(expanded.size(), 1, "configured aggregate recipe was not published");
+        IPatternDetails configured = expanded.getFirst();
+        helper.assertValueEqual(configured.getInputs().length, 3,
+                "three input items were not split into three independent inputs");
+        for (IPatternDetails.IInput input : configured.getInputs()) {
+            helper.assertValueEqual(input.getMultiplier(), 1L, "split input multiplier was not one");
+            helper.assertValueEqual(input.getPossibleInputs()[0].amount(), 1L, "split input amount was not one");
+        }
+        helper.assertTrue(configured.getOutputs().getFirst().what() instanceof AEItemKey outputKey
+                        && outputKey.is(Items.EMERALD)
+                        && !outputKey.hasComponents(),
+                "ignore-output-NBT did not strip the custom output components");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void aggregateDefaultSkipsProbabilisticMainOutput(GameTestHelper helper) {
+        AggregateRecipe recipe = new AggregateRecipe(
+                "probabilistic-main-output-test",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "probabilistic_main_output_test"),
+                AggregatePatternKind.PROCESSING,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                List.of(),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                1,
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "probabilistic_main_machine"),
+                "block.aeallpattern.probabilistic_main_machine", List.of(recipe));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        helper.assertValueEqual(
+                AggregatePatternExpander.expand(aggregate, helper.getLevel()).size(),
+                0,
+                "a chance-based main output was encoded despite the default safeguard");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void aggregateDefaultRemovesProbabilisticByproduct(GameTestHelper helper) {
+        AggregateRecipe recipe = new AggregateRecipe(
+                "probabilistic-byproduct-test",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "probabilistic_byproduct_test"),
+                AggregatePatternKind.PROCESSING,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                List.of(),
+                List.of(
+                        GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)),
+                        GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                2,
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "probabilistic_byproduct_machine"),
+                "block.aeallpattern.probabilistic_byproduct_machine", List.of(recipe));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
+        helper.assertValueEqual(expanded.size(), 1, "deterministic main output recipe was removed");
+        helper.assertValueEqual(expanded.getFirst().getOutputs().size(), 1,
+                "chance-based byproduct remained exposed as a pattern output");
+        helper.assertTrue(expanded.getFirst().getOutputs().getFirst().what() instanceof AEItemKey key
+                        && key.is(Items.GOLD_INGOT),
+                "deterministic main output changed while filtering the byproduct");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void aggregateCraftingUsesNativeIngredientSubstitution(GameTestHelper helper) {
+        AggregateRecipe recipe = new AggregateRecipe(
+                "native-chest-tag-test",
+                ResourceLocation.withDefaultNamespace("chest"),
+                AggregatePatternKind.CRAFTING,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 8))),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.CHEST))),
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "native_chest_tag_test"),
+                "block.aeallpattern.native_chest_tag_test", List.of(recipe));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
+        helper.assertValueEqual(expanded.size(), 1, "native chest aggregate recipe was not published");
+        helper.assertTrue(expanded.getFirst() instanceof IMolecularAssemblerSupportedPattern,
+                "native chest recipe was not kept as a molecular assembler pattern");
+        helper.assertTrue(Arrays.stream(expanded.getFirst().getInputs()).anyMatch(input ->
+                        input.isValid(AEItemKey.of(Items.BIRCH_PLANKS), helper.getLevel())),
+                "AE native ingredient substitution did not accept another plank type");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void aggregateProcessingSplitKeepsTagCandidates(GameTestHelper helper) {
+        GenericStack oakPlanks = GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 3));
+        AggregateInputSlot plankSlot = new AggregateInputSlot(
+                List.of(oakPlanks), Optional.of(ItemTags.PLANKS.location()));
+        AggregateRecipe recipe = new AggregateRecipe(
+                "processing-plank-tag-test",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_plank_tag_test"),
+                AggregatePatternKind.PROCESSING,
+                List.of(oakPlanks),
+                List.of(plankSlot),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.CHEST))),
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_plank_tag_test"),
+                "block.aeallpattern.processing_plank_tag_test", List.of(recipe));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+        aggregate.set(
+                ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get(),
+                new AggregatePatternOptions(true, false));
+
+        List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
+        helper.assertValueEqual(expanded.size(), 1, "tagged processing recipe was not published");
+        helper.assertValueEqual(expanded.getFirst().getInputs().length, 3,
+                "three tagged planks were not split into three independent candidate slots");
+        for (IPatternDetails.IInput input : expanded.getFirst().getInputs()) {
+            helper.assertValueEqual(input.getMultiplier(), 1L, "split candidate multiplier was not one");
+            helper.assertTrue(input.getPossibleInputs().length > 1,
+                    "split input lost its full plank candidate set");
+            helper.assertTrue(input.isValid(AEItemKey.of(Items.OAK_PLANKS), helper.getLevel())
+                            && input.isValid(AEItemKey.of(Items.BIRCH_PLANKS), helper.getLevel()),
+                    "split input cannot independently mix different plank types");
+        }
         helper.succeed();
     }
 

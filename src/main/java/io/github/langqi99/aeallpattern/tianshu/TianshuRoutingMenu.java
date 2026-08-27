@@ -1,7 +1,7 @@
 package io.github.langqi99.aeallpattern.tianshu;
 
 import appeng.menu.AEBaseMenu;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.registry.ModMenus;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -17,7 +17,7 @@ public final class TianshuRoutingMenu extends AEBaseMenu {
     private final TianshuPatternSelectorBlockEntity router;
     private int aggregatePriority = -1;
     private int pathPreference;
-    private int preferenceFlags;
+    private int preferenceFlags = 26;
     private int preferenceOrder = CraftingRoutePolicy.DEFAULT_PREFERENCE_ORDER;
 
     public TianshuRoutingMenu(int id, Inventory inventory, RegistryFriendlyByteBuf data) {
@@ -75,10 +75,11 @@ public final class TianshuRoutingMenu extends AEBaseMenu {
                 aggregatePriority,
                 true,
                 pathPreference,
-                (preferenceFlags & 1) != 0,
-                (preferenceFlags & 2) != 0,
-                (preferenceFlags & 4) != 0,
-                preferenceOrder);
+                unpackDirection(preferenceFlags, 0),
+                unpackDirection(preferenceFlags, 2),
+                (preferenceFlags & 16) != 0,
+                preferenceOrder,
+                (preferenceFlags & 32) != 0);
     }
 
     /** Applies immediately on the client and persists authoritatively on the server. */
@@ -120,15 +121,25 @@ public final class TianshuRoutingMenu extends AEBaseMenu {
     }
 
     private static int flags(CraftingRoutePolicy policy) {
-        return (policy.preferStockSurplus() ? 1 : 0)
-                | (policy.preferHighYield() ? 2 : 0)
-                | (policy.preferFast() ? 4 : 0);
+        return packDirection(policy.stockSurplusPreference(), 0)
+                | packDirection(policy.yieldPreference(), 2)
+                | (policy.preferFast() ? 16 : 0)
+                | (policy.allowByproductOrders() ? 32 : 0);
+    }
+
+    private static int packDirection(int direction, int shift) {
+        return (Math.max(-1, Math.min(1, direction)) + 1) << shift;
+    }
+
+    private static int unpackDirection(int flags, int shift) {
+        return ((flags >>> shift) & 3) - 1;
     }
 
     private static CraftingRoutePolicy forceFeasible(CraftingRoutePolicy policy) {
         CraftingRoutePolicy value = policy == null ? CraftingRoutePolicy.DEFAULT : policy;
         return new CraftingRoutePolicy(
-                value.aggregatePriority(), true, value.pathPreference(), value.preferStockSurplus(),
-                value.preferHighYield(), value.preferFast(), value.preferenceOrder());
+                value.aggregatePriority(), true, value.pathPreference(), value.stockSurplusPreference(),
+                value.yieldPreference(), value.preferFast(), value.preferenceOrder(),
+                value.allowByproductOrders());
     }
 }

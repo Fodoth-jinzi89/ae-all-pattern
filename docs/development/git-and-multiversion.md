@@ -9,7 +9,7 @@
 
 - 功能、版本号、发布元数据尽量分开提交。
 - 不覆盖玩家未提交的改动。
-- 提交前看 `git status` 和 `git diff --check`。
+- 提交前看 `git status`、`git diff --check` 和 `git diff --cached --check`。
 - 运行目录、存档、日志、下载 JAR 和个人代理文件不提交。
 - 每个提交必须能说明做了什么和为什么。
 
@@ -18,8 +18,11 @@
 需要 1.20.1 时，用独立 branch + worktree：
 
 ```bash
-git worktree add ../ae-all-pattern-1.20.1 -b mc/1.20.1
+git fetch origin
+git worktree add -b mc/1.20.1 ../ae-all-pattern-1.20.1 origin/main
 ```
+
+`origin/main` 是示例中的明确起点；如果已经批准了其他移植基线，应改成对应 commit SHA。远端维护分支已经存在时，从 `origin/mc/1.20.1` 挂载，不能省略起点并依赖当前 `HEAD`。
 
 移植顺序：
 
@@ -31,11 +34,13 @@ git worktree add ../ae-all-pattern-1.20.1 -b mc/1.20.1
 
 不要整分支硬合并后批量解决冲突；这种做法容易把客户端 API、NBT 格式和依赖版本混在一起。纯 Java policy/test 可以复用，MC 集成层必须按版本改写。
 
+完整的主辅关系、版本差异、同步步骤、反向热修复和发布门禁见 [Minecraft 1.21.1 与 1.20.1 并行开发规范](dual-version-development.md)。该规范描述维护方法，不代表当前已经发布 1.20.1；实际支持状态仍以支持矩阵为准。
+
 ## 发布文件名
 
 一个 GitHub Release 可以包含多个版本，但文件名必须显式包含版本和加载器，例如：
 
 ```text
-aeallpattern-0.1.0+mc1.21.1-neoforge.jar
-aeallpattern-0.1.0+mc1.20.1-forge.jar
+aeallpattern-1.21.1-neoforge-0.1.0.jar
+aeallpattern-1.20.1-forge-0.1.0.jar
 ```

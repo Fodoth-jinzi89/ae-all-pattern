@@ -8,10 +8,4 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-includeBuild('third_party/thunderbolt-core') {
-    dependencySubstitution {
-        substitute module('com.moakiee.thunderbolt:thunderbolt') using project(':')
-    }
-}
-
 rootProject.name = 'ae-all-pattern'

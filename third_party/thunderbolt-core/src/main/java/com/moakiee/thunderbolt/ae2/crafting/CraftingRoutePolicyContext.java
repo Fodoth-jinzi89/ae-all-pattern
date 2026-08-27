@@ -15,6 +15,11 @@ public final class CraftingRoutePolicyContext {
         return policy == null ? CraftingRoutePolicy.DEFAULT : policy;
     }
 
+    /** Whether the current calculation was explicitly claimed by a route controller. */
+    public static boolean isActive() {
+        return CURRENT.get() != null;
+    }
+
     public static <T> T withPolicy(CraftingRoutePolicy policy, Supplier<T> action) {
         Objects.requireNonNull(action, "action");
         CraftingRoutePolicy previous = CURRENT.get();

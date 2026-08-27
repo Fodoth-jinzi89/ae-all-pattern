@@ -5,13 +5,16 @@
     "P": {
       "item": "ae2:blank_pattern"
     },
+    "F": {
+      "item": "ae2:fluix_crystal"
+    },
     "S": {
       "item": "minecraft:stick"
     }
   },
   "pattern": [
     " P ",
-    " S ",
+    " F ",
     " S "
   ],
   "result": {

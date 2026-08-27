@@ -66,7 +66,6 @@ public final class AllPatternGeneratorItem extends Item {
             show(player, "message.aeallpattern.generator.empty");
             return InteractionResult.FAIL;
         }
-
         ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
         AggregatePatternData data = AggregatePatternData.capture(target, adapter.orElseThrow(), catalog);
         var ref = AggregatePatternLibrary.get(level.getServer()).put(
@@ -88,7 +87,6 @@ public final class AllPatternGeneratorItem extends Item {
             ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
         tooltip.add(Component.translatable("tooltip.aeallpattern.generator.usage"));
-        tooltip.add(Component.translatable("tooltip.aeallpattern.generator.reusable"));
     }
 
     private static void show(Player player, String key, Object... args) {

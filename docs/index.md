@@ -27,6 +27,7 @@
 - [代码复用、继承、组合与反射](development/code-reuse-and-inheritance.md)
 - [资源、数据生成与静态校验](development/resources-and-datagen.md)
 - [Git、工作树与多版本移植](development/git-and-multiversion.md)
+- [Minecraft 1.21.1 与 1.20.1 并行开发规范](development/dual-version-development.md)
 - [许可、署名与素材政策](development/licensing-and-assets.md)
 
 ## 测试

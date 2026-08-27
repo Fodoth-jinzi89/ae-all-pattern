@@ -3,6 +3,7 @@ package io.github.langqi99.aeallpattern.registry;
 import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.binding.AnchorSelection;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternRef;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternOptions;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -29,6 +30,11 @@ public final class ModDataComponents {
             COMPONENTS.registerComponentType("aggregate_pattern", builder -> builder
                     .persistent(AggregatePatternRef.CODEC)
                     .networkSynchronized(AggregatePatternRef.STREAM_CODEC)
+                    .cacheEncoding());
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<AggregatePatternOptions>>
+            AGGREGATE_PATTERN_OPTIONS = COMPONENTS.registerComponentType("aggregate_pattern_options", builder -> builder
+                    .persistent(AggregatePatternOptions.CODEC)
+                    .networkSynchronized(AggregatePatternOptions.STREAM_CODEC)
                     .cacheEncoding());
 
     private ModDataComponents() {

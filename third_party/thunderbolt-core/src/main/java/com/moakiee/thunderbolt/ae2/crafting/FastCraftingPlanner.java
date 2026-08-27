@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -166,7 +167,11 @@ public final class FastCraftingPlanner {
         boolean[] multiplePaths = {false};
         Map<AEKey, DurabilityChain<AEKey>> durability = new HashMap<>();
         Set<AEKey> emittable = new HashSet<>();
-        if (!buildGraph(craftingService, snapshot, level, output, builder, multiplePaths, durability, emittable)) {
+        Map<CraftPattern<AEKey>, List<CraftOutput<AEKey>>> secondaryRoutes = new IdentityHashMap<>();
+        CraftingRoutePolicy effectivePolicy = routePolicy == null ? CraftingRoutePolicy.DEFAULT : routePolicy;
+        if (!buildGraph(
+                craftingService, snapshot, level, output, builder, multiplePaths,
+                durability, emittable, effectivePolicy, secondaryRoutes)) {
             // Rare hard declines only: e.g. a key used both as a durability carrier (priced in uses)
             // and as a plain whole-item input — two unit systems on one pool. AE2's exact simulator
             // handles those correctly, and correctness beats speed for the odd setup that hits this.
@@ -174,14 +179,14 @@ public final class FastCraftingPlanner {
         }
 
         CraftPlan<AEKey> plan = CraftPlannerV2.plan(
-                builder.build(), output, amount,
-                routePolicy == null ? CraftingRoutePolicy.DEFAULT : routePolicy);
+                builder.build(), output, amount, effectivePolicy);
 
         boolean multi = multiplePaths[0];
         // Emittable shortfalls are supplied by emitters, not crafted, so they don't make a plan
         // infeasible — only a non-emittable shortfall does.
         if (plan.feasible() || noNonEmittableMissing(plan, emittable)) {
-            return FastAttempt.handled(toAe2Plan(output, amount, plan, multi, false, durability, emittable));
+            return FastAttempt.handled(toAe2Plan(
+                    output, amount, plan, multi, false, durability, emittable, secondaryRoutes));
         }
         // Infeasible at this amount. Best-effort policy (Policy A): we never fall back to AE2's
         // exhaustive simulator for performance — that is the slow path this engine exists to avoid.
@@ -192,7 +197,8 @@ public final class FastCraftingPlanner {
         if (!simulate) {
             return FastAttempt.handled(null); // this amount can't be made within our bounded search
         }
-        return FastAttempt.handled(toAe2Plan(output, amount, plan, multi, true, durability, emittable)); // partial + missing
+        return FastAttempt.handled(toAe2Plan(
+                output, amount, plan, multi, true, durability, emittable, secondaryRoutes)); // partial + missing
     }
 
     private static boolean noNonEmittableMissing(CraftPlan<AEKey> plan, Set<AEKey> emittable) {
@@ -216,7 +222,9 @@ public final class FastCraftingPlanner {
                                       CraftGraph.Builder<AEKey> builder,
                                       boolean[] multiplePaths,
                                       Map<AEKey, DurabilityChain<AEKey>> durability,
-                                      Set<AEKey> emittable) {
+                                      Set<AEKey> emittable,
+                                      CraftingRoutePolicy routePolicy,
+                                      Map<CraftPattern<AEKey>, List<CraftOutput<AEKey>>> secondaryRoutes) {
         Set<AEKey> seen = new HashSet<>();
         Deque<AEKey> queue = new ArrayDeque<>();
         // Memoized "how much is already in the network" per key (SIMULATE probe), used to rank fuzzy
@@ -264,38 +272,43 @@ public final class FastCraftingPlanner {
                 continue;
             }
 
-            Collection<IPatternDetails> patterns = craftingService.getCraftingFor(key);
+            Collection<IPatternDetails> indexedPatterns = craftingService.getCraftingFor(key);
+            Collection<IPatternDetails> patterns;
+            if (routePolicy.allowByproductOrders() && key.equals(root)
+                    && craftingService instanceof SecondaryOutputPatternSource secondarySource) {
+                Set<IPatternDetails> combined = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+                combined.addAll(indexedPatterns);
+                combined.addAll(secondarySource.thunderbolt$getSecondaryCraftingFor(key));
+                patterns = combined;
+            } else {
+                patterns = indexedPatterns;
+            }
             // Count only the primary-output views we actually register (see restriction below); the raw
             // getCraftingFor count would over-report "multiple paths" for secondary-output aliases.
             int registeredForKey = 0;
 
             for (IPatternDetails details : patterns) {
-                // Primary-output restriction: a pattern becomes a craft node ONLY under its declared
-                // primary output. getCraftingFor(key) also returns patterns where `key` is merely a
-                // SECONDARY output; if we registered those as a second node producing `key`, the same
-                // real IPatternDetails would be fireable through two nodes and toAe2Plan (which merges
-                // firings by source) could schedule it twice -> double-craft (over-draws stock, piles up
-                // byproducts). So we skip non-primary views here: `key` is instead supplied from the
-                // byproduct pool when its real primary is crafted, never by a second firing of this
-                // source. Trade-off (accepted): an item that is ONLY ever a secondary output, with no
-                // pattern of its own, surfaces as missing (Policy A best-effort) rather than being
-                // made by deliberately over-producing the primary.
-                GenericStack primaryStack = details.getPrimaryOutput();
-                if (primaryStack == null || !key.equals(primaryStack.what())) {
+                // Secondary outputs are only promoted for the order's root, and only behind the explicit
+                // qualification switch. Intermediate byproducts still live solely in the shared pool.
+                // This prevents an innocent dependency search from deciding to build an entire unrelated
+                // machine merely because it happens to emit the requested intermediate.
+                GenericStack declaredPrimary = details.getPrimaryOutput();
+                boolean secondaryRoute = declaredPrimary == null || !key.equals(declaredPrimary.what());
+                if (secondaryRoute && (!routePolicy.allowByproductOrders() || !key.equals(root))) {
                     continue;
                 }
                 List<GenericStack> outputs = details.getOutputs();
-                GenericStack primary = null;
+                long routedOutputAmount = 0;
                 List<CraftOutput<AEKey>> byproducts = new ArrayList<>(Math.max(0, outputs.size() - 1));
                 for (GenericStack out : outputs) {
-                    if (primary == null && key.equals(out.what())) {
-                        primary = out;
+                    if (key.equals(out.what())) {
+                        routedOutputAmount = Sat.add(routedOutputAmount, out.amount());
                     } else {
                         byproducts.add(CraftOutput.of(out.what(), out.amount()));
                     }
                 }
-                if (primary == null) {
-                    continue; // defensive: primary not enumerated in getOutputs(); skip this pattern
+                if (routedOutputAmount <= 0) {
+                    continue; // defensive: requested output not enumerated by this pattern
                 }
 
                 // Per-slot acceptable concrete options for the hard-fuzzy (OR) expansion.
@@ -363,17 +376,18 @@ public final class FastCraftingPlanner {
                         patternUnsatisfiable = true; // this recipe can't be fired; surfaces as missing
                         break;
                     }
-                    // Rank this slot's substitutes most-available-first. When the full OR-product
-                    // overruns the budget we keep only the best `FUZZY_NONCYCLE_STEPS` combinations
-                    // (lowest rank-sum), so the cheapest/in-stock routes survive instead of the recipe
-                    // being dropped wholesale.
+                    // Rank substitutes according to the order's material-surplus direction before the
+                    // bounded cartesian product is trimmed. Positive/default consumes abundant stock;
+                    // negative consumes the least-abundant *stocked* candidate first. Zero-stock choices
+                    // stay behind stocked choices in the negative mode so feasibility remains fixed first.
                     if (opts.size() > 1) {
                         for (CraftInput<AEKey> o : opts) {
                             availability.computeIfAbsent(o.key(),
                                 k -> Math.max(0L, snapshot.extract(k, Long.MAX_VALUE, Actionable.SIMULATE)));
                         }
-                        opts.sort(Comparator.comparingLong(
-                            (CraftInput<AEKey> o) -> availability.get(o.key())).reversed());
+                        opts.sort((a, b) -> compareSubstituteAvailability(
+                                availability.get(a.key()), availability.get(b.key()),
+                                routePolicy.stockSurplusPreference()));
                     }
                     slotOptions.add(opts);
                     // Saturating product: a raw `combos *= opts.size()` can overflow Long for patterns
@@ -388,12 +402,13 @@ public final class FastCraftingPlanner {
                     multiplePaths[0] = true; // fuzzy expanded into competing recipes
                 }
                 // For a craftable durability tool, one firing makes one full tool = n uses.
-                long outAmount = Sat.mul(primary.amount(), outputScale);
+                long outAmount = Sat.mul(routedOutputAmount, outputScale);
                 // Keep the best (lowest rank-sum) up to FUZZY_NONCYCLE_STEPS combinations; when the
                 // product is within budget this emits all of them, otherwise it greedily keeps the front.
                 ProviderAvailability providers = providerAvailability(craftingService, details);
                 emitBestCombinations(
-                        builder, seen, queue, key, outAmount, byproducts, slotOptions, details, providers);
+                        builder, seen, queue, key, outAmount, byproducts, slotOptions, details, providers,
+                        secondaryRoute ? byproducts : List.of(), secondaryRoutes);
                 registeredForKey++;
             }
             if (registeredForKey > 1) {
@@ -401,6 +416,17 @@ public final class FastCraftingPlanner {
             }
         }
         return true;
+    }
+
+    /** Orders fuzzy candidates while keeping the mandatory feasibility preference ahead of scarcity. */
+    static int compareSubstituteAvailability(long a, long b, int stockSurplusPreference) {
+        if (stockSurplusPreference < 0) {
+            if ((a > 0) != (b > 0)) {
+                return a > 0 ? -1 : 1;
+            }
+            return Long.compare(a, b);
+        }
+        return Long.compare(b, a);
     }
 
     /**
@@ -606,7 +632,9 @@ public final class FastCraftingPlanner {
     private static void emitBestCombinations(CraftGraph.Builder<AEKey> builder, Set<AEKey> seen, Deque<AEKey> queue,
                                          AEKey key, long outputAmount, List<CraftOutput<AEKey>> byproducts,
                                          List<List<CraftInput<AEKey>>> slotOptions, IPatternDetails source,
-                                         ProviderAvailability providers) {
+                                         ProviderAvailability providers,
+                                         List<CraftOutput<AEKey>> secondaryWarningOutputs,
+                                         Map<CraftPattern<AEKey>, List<CraftOutput<AEKey>>> secondaryRoutes) {
         for (List<CraftInput<AEKey>> coreInputs
                 : BoundedCombinations.bestFirst(slotOptions, (int) FUZZY_NONCYCLE_STEPS)) {
             // A container option (consume full, return empty) contributes its leftover as a byproduct of
@@ -626,9 +654,13 @@ public final class FastCraftingPlanner {
                     }
                 }
             }
-            builder.pattern(new CraftPattern<>(
+            CraftPattern<AEKey> pattern = new CraftPattern<>(
                     key, outputAmount, coreInputs, combo, source,
-                    providers.idle(), providers.total()));
+                    providers.idle(), providers.total());
+            builder.pattern(pattern);
+            if (!secondaryWarningOutputs.isEmpty()) {
+                secondaryRoutes.put(pattern, List.copyOf(secondaryWarningOutputs));
+            }
         }
     }
 
@@ -661,7 +693,8 @@ public final class FastCraftingPlanner {
     private static CraftingPlan toAe2Plan(AEKey output, long amount, CraftPlan<AEKey> plan,
                                           boolean multiplePaths, boolean simulation,
                                           Map<AEKey, DurabilityChain<AEKey>> durability,
-                                          Set<AEKey> emittable) {
+                                          Set<AEKey> emittable,
+                                          Map<CraftPattern<AEKey>, List<CraftOutput<AEKey>>> secondaryRoutes) {
         // Several CraftPatterns may share one IPatternDetails (fuzzy combos / multi-output nodes), so
         // accumulate firing counts per real pattern.
         Map<IPatternDetails, Long> patternTimes = new HashMap<>();
@@ -698,7 +731,7 @@ public final class FastCraftingPlanner {
 
         long bytes = computeBytes(plan, durability);
 
-        return new CraftingPlan(
+        CraftingPlan result = new CraftingPlan(
                 new GenericStack(output, amount),
                 bytes,
                 simulation,
@@ -707,6 +740,30 @@ public final class FastCraftingPlanner {
                 emittedItems,
                 missingItems,
                 patternTimes);
+        List<GenericStack> extraOutputs = collectSecondaryRouteOutputs(plan, secondaryRoutes);
+        ByproductPlanWarnings.attach(result, extraOutputs);
+        return result;
+    }
+
+    private static List<GenericStack> collectSecondaryRouteOutputs(
+            CraftPlan<AEKey> plan,
+            Map<CraftPattern<AEKey>, List<CraftOutput<AEKey>>> secondaryRoutes) {
+        Map<AEKey, Long> totals = new HashMap<>();
+        for (Map.Entry<CraftPattern<AEKey>, Long> firing : plan.firings().entrySet()) {
+            List<CraftOutput<AEKey>> outputs = secondaryRoutes.get(firing.getKey());
+            if (outputs == null || firing.getValue() <= 0) {
+                continue;
+            }
+            for (CraftOutput<AEKey> output : outputs) {
+                totals.merge(output.key(), Sat.mul(output.amount(), firing.getValue()), Sat::add);
+            }
+        }
+        return totals.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .sorted(Comparator.comparing(entry ->
+                        entry.getKey().getType().getId() + ":" + entry.getKey().getId()))
+                .map(entry -> new GenericStack(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     /**

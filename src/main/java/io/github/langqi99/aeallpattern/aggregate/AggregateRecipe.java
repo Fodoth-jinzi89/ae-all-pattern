@@ -16,12 +16,16 @@ public record AggregateRecipe(
         ResourceLocation recipeId,
         AggregatePatternKind kind,
         List<GenericStack> inputs,
+        List<AggregateInputSlot> inputSlots,
         List<GenericStack> outputs,
+        int probabilisticOutputMask,
         int processingTicks) {
     private static final Codec<List<GenericStack>> INPUTS_CODEC = GenericStack.CODEC.listOf()
             .validate(inputs -> validateStacks(inputs, 9, "inputs"));
     private static final Codec<List<GenericStack>> OUTPUTS_CODEC = GenericStack.CODEC.listOf()
             .validate(outputs -> validateStacks(outputs, 3, "outputs"));
+    private static final Codec<List<AggregateInputSlot>> INPUT_SLOTS_CODEC = AggregateInputSlot.CODEC.listOf()
+            .validate(AggregateRecipe::validateInputSlots);
 
     public static final Codec<AggregateRecipe> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.fieldOf("pattern_id").forGetter(AggregateRecipe::patternId),
@@ -29,7 +33,10 @@ public record AggregateRecipe(
             AggregatePatternKind.CODEC.optionalFieldOf("kind", AggregatePatternKind.PROCESSING)
                     .forGetter(AggregateRecipe::kind),
             INPUTS_CODEC.fieldOf("inputs").forGetter(AggregateRecipe::inputs),
+            INPUT_SLOTS_CODEC.optionalFieldOf("input_slots", List.of()).forGetter(AggregateRecipe::inputSlots),
             OUTPUTS_CODEC.fieldOf("outputs").forGetter(AggregateRecipe::outputs),
+            Codec.INT.optionalFieldOf("probabilistic_output_mask", 0)
+                    .forGetter(AggregateRecipe::probabilisticOutputMask),
             Codec.INT.optionalFieldOf("processing_ticks", 1).forGetter(AggregateRecipe::processingTicks)
     ).apply(instance, AggregateRecipe::new));
     public static final StreamCodec<RegistryFriendlyByteBuf, AggregateRecipe> STREAM_CODEC = StreamCodec.of(
@@ -40,8 +47,36 @@ public record AggregateRecipe(
             throw new IllegalArgumentException("invalid aggregate pattern id");
         }
         inputs = copyAndValidate(inputs, 9, "inputs");
+        inputSlots = inputSlots == null || inputSlots.isEmpty()
+                ? inputs.stream().map(AggregateInputSlot::exact).toList()
+                : copyAndValidateSlots(inputSlots);
+        inputs = inputSlots.stream().map(AggregateInputSlot::primary).toList();
         outputs = copyAndValidate(outputs, 3, "outputs");
+        probabilisticOutputMask &= (1 << outputs.size()) - 1;
         processingTicks = Math.max(1, processingTicks);
+    }
+
+    /** Compatibility constructor for callers that do not provide probability metadata. */
+    public AggregateRecipe(
+            String patternId,
+            ResourceLocation recipeId,
+            AggregatePatternKind kind,
+            List<GenericStack> inputs,
+            List<AggregateInputSlot> inputSlots,
+            List<GenericStack> outputs,
+            int processingTicks) {
+        this(patternId, recipeId, kind, inputs, inputSlots, outputs, 0, processingTicks);
+    }
+
+    /** Compatibility constructor for existing processing-only callers and saved data. */
+    public AggregateRecipe(
+            String patternId,
+            ResourceLocation recipeId,
+            AggregatePatternKind kind,
+            List<GenericStack> inputs,
+            List<GenericStack> outputs,
+            int processingTicks) {
+        this(patternId, recipeId, kind, inputs, List.of(), outputs, 0, processingTicks);
     }
 
     /** Compatibility constructor for existing processing-only callers and saved data. */
@@ -51,7 +86,7 @@ public record AggregateRecipe(
             List<GenericStack> inputs,
             List<GenericStack> outputs,
             int processingTicks) {
-        this(patternId, recipeId, AggregatePatternKind.PROCESSING, inputs, outputs, processingTicks);
+        this(patternId, recipeId, AggregatePatternKind.PROCESSING, inputs, List.of(), outputs, 0, processingTicks);
     }
 
     public static AggregateRecipe from(RecipeSnapshot snapshot) {
@@ -63,6 +98,10 @@ public record AggregateRecipe(
                 snapshot.processingTicks());
     }
 
+    public boolean isProbabilisticOutput(int index) {
+        return index >= 0 && index < outputs.size() && (probabilisticOutputMask & (1 << index)) != 0;
+    }
+
     private static DataResult<List<GenericStack>> validateStacks(
             List<GenericStack> stacks, int maximum, String name) {
         if (stacks.isEmpty() || stacks.size() > maximum) {
@@ -72,6 +111,29 @@ public record AggregateRecipe(
             return DataResult.error(() -> "aggregate recipe " + name + " must be non-empty");
         }
         return DataResult.success(stacks);
+    }
+
+    private static DataResult<List<AggregateInputSlot>> validateInputSlots(List<AggregateInputSlot> slots) {
+        try {
+            return DataResult.success(copyAndValidateSlots(slots));
+        } catch (IllegalArgumentException error) {
+            return DataResult.error(error::getMessage);
+        }
+    }
+
+    private static List<AggregateInputSlot> copyAndValidateSlots(List<AggregateInputSlot> slots) {
+        if (slots == null || slots.isEmpty() || slots.size() > 9) {
+            throw new IllegalArgumentException("aggregate recipe must have 1-9 input slots");
+        }
+        List<AggregateInputSlot> result = List.copyOf(slots);
+        if (result.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("aggregate recipe input slots must be non-empty");
+        }
+        int totalAlternatives = result.stream().mapToInt(slot -> slot.alternatives().size()).sum();
+        if (totalAlternatives > 512) {
+            throw new IllegalArgumentException("aggregate recipe has too many explicit input alternatives");
+        }
+        return result;
     }
 
     private static List<GenericStack> copyAndValidate(
@@ -90,10 +152,11 @@ public record AggregateRecipe(
         buffer.writeUtf(recipe.patternId(), 160);
         buffer.writeResourceLocation(recipe.recipeId());
         buffer.writeEnum(recipe.kind());
-        buffer.writeVarInt(recipe.inputs.size());
-        recipe.inputs.forEach(stack -> GenericStack.STREAM_CODEC.encode(buffer, stack));
+        buffer.writeVarInt(recipe.inputSlots.size());
+        recipe.inputSlots.forEach(slot -> AggregateInputSlot.STREAM_CODEC.encode(buffer, slot));
         buffer.writeVarInt(recipe.outputs.size());
         recipe.outputs.forEach(stack -> GenericStack.STREAM_CODEC.encode(buffer, stack));
+        buffer.writeByte(recipe.probabilisticOutputMask);
         buffer.writeVarInt(recipe.processingTicks());
     }
 
@@ -102,12 +165,16 @@ public record AggregateRecipe(
         ResourceLocation recipeId = buffer.readResourceLocation();
         AggregatePatternKind kind = buffer.readEnum(AggregatePatternKind.class);
         int inputCount = checkedCount(buffer.readVarInt(), 9, "input");
-        List<GenericStack> inputs = java.util.stream.IntStream.range(0, inputCount)
-                .mapToObj(index -> GenericStack.STREAM_CODEC.decode(buffer)).toList();
+        List<AggregateInputSlot> inputSlots = java.util.stream.IntStream.range(0, inputCount)
+                .mapToObj(index -> AggregateInputSlot.STREAM_CODEC.decode(buffer)).toList();
         int outputCount = checkedCount(buffer.readVarInt(), 3, "output");
         List<GenericStack> outputs = java.util.stream.IntStream.range(0, outputCount)
                 .mapToObj(index -> GenericStack.STREAM_CODEC.decode(buffer)).toList();
-        return new AggregateRecipe(patternId, recipeId, kind, inputs, outputs, buffer.readVarInt());
+        int probabilisticOutputMask = buffer.readUnsignedByte();
+        return new AggregateRecipe(
+                patternId, recipeId, kind,
+                inputSlots.stream().map(AggregateInputSlot::primary).toList(),
+                inputSlots, outputs, probabilisticOutputMask, buffer.readVarInt());
     }
 
     private static int checkedCount(int count, int maximum, String name) {

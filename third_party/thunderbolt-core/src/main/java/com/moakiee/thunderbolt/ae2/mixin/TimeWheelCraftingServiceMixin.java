@@ -47,6 +47,7 @@ import appeng.me.service.CraftingService;
 
 import com.moakiee.thunderbolt.ae2.crafting.FastCraftingControl;
 import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicyContext;
+import com.moakiee.thunderbolt.CoreConfig;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCPU;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPool;
 import com.moakiee.thunderbolt.ae2.timewheel.TimeWheelCraftingCpuPoolProvider;
@@ -103,7 +104,12 @@ public abstract class TimeWheelCraftingServiceMixin {
                                                                 CalculationStrategy strategy,
                                                                 CallbackInfoReturnable<Future<ICraftingPlan>> cir,
                                                                 @Local CraftingCalculation job) {
-        boolean enabled = TimeWheelFastPlanningGate.shouldEnableFastPlanning(thunderbolt$getTimeWheelPools());
+        // A Tianshu router owns route calculation without registering itself as
+        // an AE crafting CPU. Its explicit per-order context therefore enables
+        // the fast planner directly; time-wheel CPUs remain an independent gate.
+        boolean routedOrder = CraftingRoutePolicyContext.isActive();
+        boolean enabled = TimeWheelFastPlanningGate.shouldEnableFastPlanning(thunderbolt$getTimeWheelPools())
+                || routedOrder && CoreConfig.FAST_PATH_ENABLED;
         FastCraftingControl control = (FastCraftingControl) job;
         control.ae2lt$setFastPlanningEnabled(enabled);
         control.ae2lt$setRoutePolicy(CraftingRoutePolicyContext.current());

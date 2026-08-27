@@ -5,7 +5,8 @@ import appeng.api.networking.IManagedGridNode;
 import appeng.api.orientation.BlockOrientation;
 import appeng.api.util.AECableType;
 import appeng.blockentity.grid.AENetworkedBlockEntity;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.SecondaryOutputPatternSource;
 import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
 import io.github.langqi99.aeallpattern.registry.ModBlocks;
 import java.util.EnumSet;
@@ -77,8 +78,14 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
     public void setRoutingPolicy(CraftingRoutePolicy routingPolicy) {
         CraftingRoutePolicy normalized = routingPolicy == null ? CraftingRoutePolicy.DEFAULT : routingPolicy;
         if (!this.routingPolicy.equals(normalized)) {
+            boolean secondaryIndexChanged = this.routingPolicy.allowByproductOrders()
+                    != normalized.allowByproductOrders();
             this.routingPolicy = normalized;
             saveChanges();
+            if (secondaryIndexChanged && getGrid() != null
+                    && getGrid().getCraftingService() instanceof SecondaryOutputPatternSource source) {
+                source.aeallpattern$secondaryOutputsChanged();
+            }
         }
     }
 
@@ -89,10 +96,11 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
         policyTag.putInt("AggregatePriority", routingPolicy.aggregatePriority());
         policyTag.putBoolean("RequireFeasible", routingPolicy.requireFeasible());
         policyTag.putInt("PathPreference", routingPolicy.pathPreference());
-        policyTag.putBoolean("PreferStockSurplus", routingPolicy.preferStockSurplus());
-        policyTag.putBoolean("PreferHighYield", routingPolicy.preferHighYield());
+        policyTag.putInt("StockSurplusPreference", routingPolicy.stockSurplusPreference());
+        policyTag.putInt("YieldPreference", routingPolicy.yieldPreference());
         policyTag.putBoolean("PreferFast", routingPolicy.preferFast());
         policyTag.putInt("PreferenceOrder", routingPolicy.preferenceOrder());
+        policyTag.putBoolean("AllowByproductOrders", routingPolicy.allowByproductOrders());
         tag.put(ROUTING_POLICY_TAG, policyTag);
     }
 
@@ -105,15 +113,23 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
                     policyTag.contains("AggregatePriority") ? policyTag.getInt("AggregatePriority") : -1,
                     !policyTag.contains("RequireFeasible") || policyTag.getBoolean("RequireFeasible"),
                     policyTag.getInt("PathPreference"),
-                    policyTag.getBoolean("PreferStockSurplus"),
-                    policyTag.getBoolean("PreferHighYield"),
+                    readDirection(policyTag, "StockSurplusPreference", "PreferStockSurplus"),
+                    readDirection(policyTag, "YieldPreference", "PreferHighYield"),
                     policyTag.getBoolean("PreferFast"),
                     policyTag.contains("PreferenceOrder")
                             ? policyTag.getInt("PreferenceOrder")
-                            : CraftingRoutePolicy.DEFAULT_PREFERENCE_ORDER);
+                            : CraftingRoutePolicy.DEFAULT_PREFERENCE_ORDER,
+                    policyTag.getBoolean("AllowByproductOrders"));
         } else {
             routingPolicy = CraftingRoutePolicy.DEFAULT;
         }
+    }
+
+    private static int readDirection(CompoundTag tag, String key, String legacyBooleanKey) {
+        if (tag.contains(key)) {
+            return tag.getInt(key);
+        }
+        return tag.contains(legacyBooleanKey) && tag.getBoolean(legacyBooleanKey) ? 1 : 0;
     }
 
     @Override

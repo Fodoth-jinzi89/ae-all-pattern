@@ -6,7 +6,7 @@ import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
-import com.moakiee.thunderbolt.ae2.crafting.RoutingPatternMetadata;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.RoutingPatternMetadata;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.core.NonNullList;

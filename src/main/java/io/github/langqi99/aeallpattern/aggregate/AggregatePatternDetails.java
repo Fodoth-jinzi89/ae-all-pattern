@@ -3,9 +3,10 @@ package io.github.langqi99.aeallpattern.aggregate;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.crafting.PatternDetailsTooltip;
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
-import com.moakiee.thunderbolt.ae2.crafting.RoutingPatternMetadata;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.RoutingPatternMetadata;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.world.item.TooltipFlag;
@@ -17,13 +18,21 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
     private final AEItemKey definition;
     private final IPatternDetails delegate;
     private final int processingTicks;
+    private final IInput[] configuredInputs;
 
     public AggregatePatternDetails(
-            String patternId, AEItemKey definition, IPatternDetails delegate, int processingTicks) {
+            String patternId,
+            AEItemKey definition,
+            IPatternDetails delegate,
+            int processingTicks,
+            List<AggregateInputSlot> configuredSlots) {
         this.patternId = Objects.requireNonNull(patternId, "patternId");
         this.definition = Objects.requireNonNull(definition, "definition");
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.processingTicks = Math.max(1, processingTicks);
+        this.configuredInputs = configuredSlots == null || configuredSlots.isEmpty()
+                ? null
+                : configuredSlots.stream().map(AlternativeInput::new).toArray(IInput[]::new);
     }
 
     @Override
@@ -33,7 +42,7 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
 
     @Override
     public IInput[] getInputs() {
-        return delegate.getInputs();
+        return configuredInputs == null ? delegate.getInputs() : configuredInputs;
     }
 
     @Override
@@ -48,7 +57,11 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
 
     @Override
     public void pushInputsToExternalInventory(KeyCounter[] inputHolders, PatternInputSink sink) {
-        delegate.pushInputsToExternalInventory(inputHolders, sink);
+        if (configuredInputs == null) {
+            delegate.pushInputsToExternalInventory(inputHolders, sink);
+        } else {
+            IPatternDetails.super.pushInputsToExternalInventory(inputHolders, sink);
+        }
     }
 
     @Override
@@ -81,5 +94,38 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
     @Override
     public int hashCode() {
         return 31 * definition.hashCode() + patternId.hashCode();
+    }
+
+    private static final class AlternativeInput implements IInput {
+        private final GenericStack[] possibleInputs;
+
+        private AlternativeInput(AggregateInputSlot slot) {
+            possibleInputs = slot.alternatives().toArray(GenericStack[]::new);
+        }
+
+        @Override
+        public GenericStack[] getPossibleInputs() {
+            return possibleInputs;
+        }
+
+        @Override
+        public long getMultiplier() {
+            return 1;
+        }
+
+        @Override
+        public boolean isValid(AEKey key, Level level) {
+            for (GenericStack candidate : possibleInputs) {
+                if (key.matches(candidate)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public AEKey getRemainingKey(AEKey key) {
+            return null;
+        }
     }
 }

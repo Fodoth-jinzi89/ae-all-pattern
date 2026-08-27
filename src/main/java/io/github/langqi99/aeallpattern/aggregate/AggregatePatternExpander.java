@@ -27,6 +27,8 @@ import net.minecraft.world.item.crafting.StonecutterRecipe;
 import net.minecraft.world.level.Level;
 
 public final class AggregatePatternExpander {
+    static final int MAX_SPLIT_ITEM_INPUTS = 4096;
+
     private AggregatePatternExpander() {
     }
 
@@ -39,11 +41,21 @@ public final class AggregatePatternExpander {
 
         List<AggregateRecipe> recipes = AggregatePatternLibrary.get(serverLevel.getServer())
                 .recipes(serverLevel.getServer(), ref.libraryId()).orElse(List.of());
+        AggregatePatternOptions options = aggregateStack.get(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get());
+        if (options == null) {
+            options = AggregatePatternOptions.DEFAULT;
+        }
 
         List<IPatternDetails> expanded = new ArrayList<>(recipes.size());
         for (AggregateRecipe recipe : recipes) {
             try {
-                ItemStack encoded = encode(recipe, serverLevel);
+                if (options.skipProbabilisticMainOutput() && recipe.isProbabilisticOutput(0)) {
+                    continue;
+                }
+                AggregateRecipe configuredRecipe = configureOutputs(recipe, options);
+                List<AggregateInputSlot> configuredInputs = configuredProcessingInputs(
+                        configuredRecipe, options, serverLevel);
+                ItemStack encoded = encode(configuredRecipe, serverLevel);
                 if (encoded.isEmpty()) {
                     AeAllPattern.LOGGER.debug(
                             "Cannot encode aggregate {} child {} as {}; skipping instead of changing its pattern type",
@@ -57,14 +69,14 @@ public final class AggregatePatternExpander {
                 }
 
                 encoded.set(ModDataComponents.VIRTUAL_PATTERN_ID.get(),
-                        "aggregate:" + recipe.patternId());
+                        virtualPatternId(recipe, options, configuredInputs));
                 AEItemKey definition = AEItemKey.of(encoded);
                 if (delegate instanceof IMolecularAssemblerSupportedPattern assemblerPattern) {
                     expanded.add(new AggregateAssemblerPatternDetails(
                             recipe.patternId(), definition, assemblerPattern, recipe.processingTicks()));
                 } else {
                     expanded.add(new AggregatePatternDetails(
-                            recipe.patternId(), definition, delegate, recipe.processingTicks()));
+                            recipe.patternId(), definition, delegate, recipe.processingTicks(), configuredInputs));
                 }
             } catch (RuntimeException error) {
                 AeAllPattern.LOGGER.warn(
@@ -72,6 +84,109 @@ public final class AggregatePatternExpander {
             }
         }
         return List.copyOf(expanded);
+    }
+
+    private static AggregateRecipe configureOutputs(
+            AggregateRecipe recipe, AggregatePatternOptions options) {
+        if (!options.ignoreOutputComponents() && !options.ignoreProbabilisticByproducts()) {
+            return recipe;
+        }
+
+        List<GenericStack> outputs = new ArrayList<>(recipe.outputs().size());
+        int probabilisticOutputMask = 0;
+        for (int sourceIndex = 0; sourceIndex < recipe.outputs().size(); sourceIndex++) {
+            boolean probabilistic = recipe.isProbabilisticOutput(sourceIndex);
+            if (sourceIndex > 0 && probabilistic && options.ignoreProbabilisticByproducts()) {
+                continue;
+            }
+            GenericStack stack = recipe.outputs().get(sourceIndex);
+            if (options.ignoreOutputComponents()
+                    && stack.what() instanceof AEItemKey itemKey
+                    && itemKey.hasComponents()) {
+                stack = new GenericStack(AEItemKey.of(itemKey.getItem()), stack.amount());
+            }
+            if (probabilistic) {
+                probabilisticOutputMask |= 1 << outputs.size();
+            }
+            outputs.add(stack);
+        }
+        return new AggregateRecipe(
+                recipe.patternId(), recipe.recipeId(), recipe.kind(),
+                recipe.inputs(), recipe.inputSlots(), outputs,
+                probabilisticOutputMask, recipe.processingTicks());
+    }
+
+    /**
+     * Resolves processing-slot alternatives at expansion time so tags follow the current datapack.
+     * A custom input view is only needed for alternatives or unit splitting; exact legacy inputs keep
+     * delegating to AE2 so their normal container-item semantics remain untouched.
+     */
+    private static List<AggregateInputSlot> configuredProcessingInputs(
+            AggregateRecipe recipe,
+            AggregatePatternOptions options,
+            net.minecraft.server.level.ServerLevel level) {
+        if (recipe.kind() != AggregatePatternKind.PROCESSING) {
+            return List.of();
+        }
+
+        if (options.splitSameItems()) {
+            List<AggregateInputSlot> result = new ArrayList<>();
+            for (AggregateInputSlot slot : recipe.inputSlots()) {
+                result.addAll(slot.splitUnits(level));
+                if (result.size() > MAX_SPLIT_ITEM_INPUTS) {
+                    throw new IllegalArgumentException(
+                            "split item input count exceeds safety limit " + MAX_SPLIT_ITEM_INPUTS);
+                }
+            }
+            return List.copyOf(result);
+        }
+
+        if (recipe.inputSlots().stream().noneMatch(AggregateInputSlot::hasAlternatives)) {
+            return List.of();
+        }
+        return recipe.inputSlots().stream()
+                .map(slot -> new AggregateInputSlot(slot.resolve(level), Optional.empty()))
+                .toList();
+    }
+
+    /** Expands every item count n into exactly n independent unit inputs. */
+    static List<GenericStack> splitItemInputs(List<GenericStack> inputs) {
+        long expandedSize = 0;
+        for (GenericStack input : inputs) {
+            expandedSize += input.what() instanceof AEItemKey ? input.amount() : 1;
+            if (expandedSize > MAX_SPLIT_ITEM_INPUTS) {
+                throw new IllegalArgumentException(
+                        "split item input count exceeds safety limit " + MAX_SPLIT_ITEM_INPUTS);
+            }
+        }
+
+        List<GenericStack> expanded = new ArrayList<>((int) expandedSize);
+        for (GenericStack input : inputs) {
+            if (input.what() instanceof AEItemKey) {
+                for (long index = 0; index < input.amount(); index++) {
+                    expanded.add(new GenericStack(input.what(), 1));
+                }
+            } else {
+                expanded.add(input);
+            }
+        }
+        return List.copyOf(expanded);
+    }
+
+    private static String virtualPatternId(
+            AggregateRecipe recipe,
+            AggregatePatternOptions options,
+            List<AggregateInputSlot> configuredInputs) {
+        String value = "aggregate:" + options.flags() + ":" + recipe.patternId();
+        if (!configuredInputs.isEmpty()) {
+            // Makes refreshed providers observe datapack/tag membership changes without regenerating the item.
+            value += ":inputs=" + Integer.toUnsignedString(configuredInputs.hashCode(), 16);
+        }
+        if (value.length() <= 160) {
+            return value;
+        }
+        String suffix = Integer.toUnsignedString(value.hashCode(), 16);
+        return value.substring(0, 159 - suffix.length()) + ":" + suffix;
     }
 
     private static ItemStack encode(
@@ -103,7 +218,7 @@ public final class AggregatePatternExpander {
         if (output.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        return PatternDetailsHelper.encodeCraftingPattern(holder.orElseThrow(), grid, output, false, false);
+        return PatternDetailsHelper.encodeCraftingPattern(holder.orElseThrow(), grid, output, true, false);
     }
 
     private static Optional<RecipeHolder<CraftingRecipe>> craftingHolder(
@@ -135,7 +250,7 @@ public final class AggregatePatternExpander {
             return ItemStack.EMPTY;
         }
         return PatternDetailsHelper.encodeStonecuttingPattern(
-                castHolder(rawHolder.orElseThrow()), input, output, false);
+                castHolder(rawHolder.orElseThrow()), input, output, true);
     }
 
     private static ItemStack encodeSmithing(
@@ -152,7 +267,7 @@ public final class AggregatePatternExpander {
             return ItemStack.EMPTY;
         }
         return PatternDetailsHelper.encodeSmithingTablePattern(
-                castHolder(rawHolder.orElseThrow()), template, base, addition, output, false);
+                castHolder(rawHolder.orElseThrow()), template, base, addition, output, true);
     }
 
     private static ItemStack[] craftingGrid(CraftingRecipe recipe) {

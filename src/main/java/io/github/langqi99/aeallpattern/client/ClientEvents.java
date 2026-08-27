@@ -31,6 +31,7 @@ public final class ClientEvents {
     }
 
     public static void registerScreens(RegisterMenuScreensEvent event) {
+        event.register(ModMenus.AGGREGATE_PATTERN_CONFIG.get(), AggregatePatternConfigScreen::new);
         InitScreens.register(
                 event,
                 ModMenus.TIANSHU_ROUTING.get(),

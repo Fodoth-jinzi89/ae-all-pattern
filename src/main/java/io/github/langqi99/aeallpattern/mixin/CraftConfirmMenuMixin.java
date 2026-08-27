@@ -7,10 +7,12 @@ import appeng.api.networking.crafting.ICraftingService;
 import appeng.api.networking.crafting.ICraftingSimulationRequester;
 import appeng.api.networking.security.IActionHost;
 import appeng.api.stacks.AEKey;
+import appeng.api.stacks.GenericStack;
 import appeng.menu.guisync.GuiSync;
 import appeng.menu.me.crafting.CraftConfirmMenu;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicyContext;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicyContext;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.ByproductPlanWarnings;
 import io.github.langqi99.aeallpattern.tianshu.CraftConfirmRoutingMenu;
 import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingPolicies;
 import java.util.concurrent.Future;
@@ -35,6 +37,9 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
     private int amount;
 
     @Shadow
+    private ICraftingPlan result;
+
+    @Shadow
     public abstract boolean planJob(AEKey what, int amount, CalculationStrategy strategy);
 
     @Unique
@@ -55,11 +60,19 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
 
     @Unique
     @GuiSync(44)
-    public int aeallpattern$preferenceFlags;
+    public int aeallpattern$preferenceFlags = 26;
 
     @Unique
     @GuiSync(45)
     public int aeallpattern$preferenceOrder = CraftingRoutePolicy.DEFAULT_PREFERENCE_ORDER;
+
+    @Unique
+    @GuiSync(46)
+    public GenericStack aeallpattern$byproductWarning;
+
+    @Unique
+    @GuiSync(47)
+    public int aeallpattern$byproductWarningKinds;
 
     @Unique
     private boolean aeallpattern$policyInitialized;
@@ -81,6 +94,8 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
         if (self.isClientSide()) {
             return;
         }
+        aeallpattern$byproductWarning = null;
+        aeallpattern$byproductWarningKinds = 0;
         IGrid grid = aeallpattern$getGrid(self);
         aeallpattern$routingAvailable = TianshuRoutingPolicies.isAvailable(grid);
         if (!aeallpattern$policyInitialized) {
@@ -106,12 +121,23 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
             AEKey what,
             long requestedAmount,
             CalculationStrategy strategy) {
-        CraftingRoutePolicy policy = aeallpattern$routingAvailable
-                ? aeallpattern$getRoutePolicy()
-                : CraftingRoutePolicy.DEFAULT;
+        if (!aeallpattern$routingAvailable) {
+            return service.beginCraftingCalculation(level, requester, what, requestedAmount, strategy);
+        }
         return CraftingRoutePolicyContext.withPolicy(
-                policy,
+                aeallpattern$getRoutePolicy(),
                 () -> service.beginCraftingCalculation(level, requester, what, requestedAmount, strategy));
+    }
+
+    @Inject(method = "broadcastChanges", at = @At("TAIL"))
+    private void aeallpattern$captureByproductWarning(CallbackInfo ci) {
+        CraftConfirmMenu self = (CraftConfirmMenu) (Object) this;
+        if (self.isClientSide()) {
+            return;
+        }
+        java.util.List<GenericStack> extras = ByproductPlanWarnings.get(result);
+        aeallpattern$byproductWarning = extras.isEmpty() ? null : extras.getFirst();
+        aeallpattern$byproductWarningKinds = extras.size();
     }
 
     @Override
@@ -125,10 +151,11 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
                 aeallpattern$aggregatePriority,
                 aeallpattern$requireFeasible != 0,
                 aeallpattern$pathPreference,
-                (aeallpattern$preferenceFlags & 1) != 0,
-                (aeallpattern$preferenceFlags & 2) != 0,
-                (aeallpattern$preferenceFlags & 4) != 0,
-                aeallpattern$preferenceOrder);
+                aeallpattern$unpackDirection(aeallpattern$preferenceFlags, 0),
+                aeallpattern$unpackDirection(aeallpattern$preferenceFlags, 2),
+                (aeallpattern$preferenceFlags & 16) != 0,
+                aeallpattern$preferenceOrder,
+                (aeallpattern$preferenceFlags & 32) != 0);
     }
 
     @Override
@@ -143,6 +170,16 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
         } else {
             aeallpattern$replan();
         }
+    }
+
+    @Override
+    public GenericStack aeallpattern$getByproductWarning() {
+        return aeallpattern$byproductWarning;
+    }
+
+    @Override
+    public int aeallpattern$getByproductWarningKinds() {
+        return aeallpattern$byproductWarningKinds;
     }
 
     @Unique
@@ -167,10 +204,21 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
         aeallpattern$aggregatePriority = policy.aggregatePriority();
         aeallpattern$requireFeasible = policy.requireFeasible() ? 1 : 0;
         aeallpattern$pathPreference = policy.pathPreference();
-        aeallpattern$preferenceFlags = (policy.preferStockSurplus() ? 1 : 0)
-                | (policy.preferHighYield() ? 2 : 0)
-                | (policy.preferFast() ? 4 : 0);
+        aeallpattern$preferenceFlags = aeallpattern$packDirection(policy.stockSurplusPreference(), 0)
+                | aeallpattern$packDirection(policy.yieldPreference(), 2)
+                | (policy.preferFast() ? 16 : 0)
+                | (policy.allowByproductOrders() ? 32 : 0);
         aeallpattern$preferenceOrder = policy.preferenceOrder();
+    }
+
+    @Unique
+    private static int aeallpattern$packDirection(int direction, int shift) {
+        return (Math.max(-1, Math.min(1, direction)) + 1) << shift;
+    }
+
+    @Unique
+    private static int aeallpattern$unpackDirection(int flags, int shift) {
+        return ((flags >>> shift) & 3) - 1;
     }
 
     @Unique
@@ -178,8 +226,8 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
         CraftingRoutePolicy value = policy == null ? CraftingRoutePolicy.DEFAULT : policy;
         return new CraftingRoutePolicy(
                 value.aggregatePriority(), true, value.pathPreference(),
-                value.preferStockSurplus(), value.preferHighYield(), value.preferFast(),
-                value.preferenceOrder());
+                value.stockSurplusPreference(), value.yieldPreference(), value.preferFast(),
+                value.preferenceOrder(), value.allowByproductOrders());
     }
 
     @Unique

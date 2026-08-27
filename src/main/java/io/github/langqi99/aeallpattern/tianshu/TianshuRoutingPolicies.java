@@ -1,7 +1,7 @@
 package io.github.langqi99.aeallpattern.tianshu;
 
 import appeng.api.networking.IGrid;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import java.util.Comparator;
 
 /** Resolves the deterministic network default when more than one router is connected. */

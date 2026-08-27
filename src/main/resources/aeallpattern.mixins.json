@@ -5,7 +5,12 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "AEBaseMenuAccessor",
+    "NetworkCraftingProvidersAccessor",
+    "TianshuCraftingServiceMixin",
+    "TianshuCraftingCalculationMixin",
+    "CraftingServiceSecondaryOutputMixin",
     "PatternProviderLogicMixin",
+    "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"
   ],
   "client": [

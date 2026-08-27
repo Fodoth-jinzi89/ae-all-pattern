@@ -2,6 +2,7 @@ package io.github.langqi99.aeallpattern.registry;
 
 import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingMenu;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternConfigMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -15,6 +16,9 @@ public final class ModMenus {
 
     public static final DeferredHolder<MenuType<?>, MenuType<TianshuRoutingMenu>> TIANSHU_ROUTING =
             MENUS.register("tianshu_routing", () -> IMenuTypeExtension.create(TianshuRoutingMenu::new));
+    public static final DeferredHolder<MenuType<?>, MenuType<AggregatePatternConfigMenu>> AGGREGATE_PATTERN_CONFIG =
+            MENUS.register("aggregate_pattern_config", () ->
+                    IMenuTypeExtension.create(AggregatePatternConfigMenu::new));
 
     private ModMenus() {
     }

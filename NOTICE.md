@@ -6,9 +6,9 @@ Microsoft, Applied Energistics 2, JEI, or Mekanism.
 - Applied Energistics 2 is used through its published API and Maven artifact.
 - AE2 Lightning Tech is the source of the adapted gameplay textures, models,
   and single-block CPU host listed below.
-- Thunderbolt Core is vendored as a separate source build under
-  `third_party/thunderbolt-core` and supplies the optimized crafting planner,
-  time-wheel dispatcher, virtual CPU pool, and AE2 integration mixins.
+- Selected Thunderbolt Core 1.0.6 planning code is adapted into the private
+  `io.github.langqi99.aeallpattern.internal.routing` package. It is part of
+  AE All Pattern rather than a nested or runtime Thunderbolt mod.
 - JEI is an optional client-side contextual-help integration.
 - Mekanism is an optional machine integration target used through its public API.
 - Minecraft and all referenced mod names and assets belong to their respective owners.
@@ -38,8 +38,8 @@ adapted from AE2 Lightning Tech's removed `TestTimeWheelCraftingCpuBlock` and
 `TestTimeWheelCraftingCpuBlockEntity` at revision
 `fe8590ea45becd0c5f4ab67f4e779612eff09a8a`. It has been renamed, integrated
 with this mod's registries and resource namespace, given an active blockstate,
-and otherwise preserves the upstream infinite-storage / 16384-parallel CPU
-configuration. Pattern-selection behavior is not included yet.
+and converted into a routing-only network controller. It does not register
+storage, co-processors, or any crafting CPU capability.
 
 AE2 Lightning Tech credits its project team on the upstream repository. Its
 textures and other visual assets are licensed under
@@ -49,13 +49,14 @@ The adapted texture and model files are distributed under the same license.
 AE2 Lightning Tech source code is licensed under GNU LGPL 3.0. The adapted
 single-block host remains covered by that license.
 
-## Vendored Thunderbolt Core
+## Adapted routing engine
 
-`third_party/thunderbolt-core` is taken from
-[Thunderbolt Core](https://github.com/ae2lt/Thunderbolt-Core) at revision
-`171a6cba1a5d8d62a0019dd8ff74158344928f54`. Its source and generated binary
-remain licensed under GNU LGPL 3.0; the upstream `LICENSE` is retained in that
-directory and included in its JAR.
+The private routing engine is adapted from
+[Thunderbolt Core](https://github.com/ae2lt/Thunderbolt-Core), upstream release
+1.0.6 (source snapshot 1.0.6.1). Selected planner and AE2 adapter code was moved
+to the private AE All Pattern namespace and modified for router-scoped
+activation. It remains licensed under GNU LGPL 3.0; the upstream `LICENSE` is
+retained under `third_party/thunderbolt-core` and included in the release JAR.
 
 No upstream asset namespace is bundled: adapted assets live under the
 `aeallpattern` namespace. The remaining project artwork, including the mod

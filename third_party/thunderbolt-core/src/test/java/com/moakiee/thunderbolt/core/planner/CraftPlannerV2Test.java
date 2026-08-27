@@ -163,15 +163,82 @@ class CraftPlannerV2Test {
                 .stock("fastRaw", 10).stock("slowRaw", 2)
                 .build();
 
+        CraftingRoutePolicy neutral = CraftingRoutePolicy.DEFAULT
+                .withStockSurplusPreference(0)
+                .withYieldPreference(0)
+                .withFast(false)
+                .withPathPreference(0);
         CraftPlan<String> yieldPlan = CraftPlannerV2.plan(
-                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withHighYield(true));
+                graph, "A", 1, neutral.withYieldPreference(1));
         CraftPlan<String> fastPlan = CraftPlannerV2.plan(
-                graph, "A", 1, CraftingRoutePolicy.DEFAULT.withFast(true));
+                graph, "A", 1, neutral.withFast(true));
 
         assertEquals(1L, firingsOf(yieldPlan, slowHighYield));
         assertEquals(0L, firingsOf(yieldPlan, fastLowYield));
         assertEquals(1L, firingsOf(fastPlan, fastLowYield));
         assertEquals(0L, firingsOf(fastPlan, slowHighYield));
+    }
+
+    @Test
+    void yieldPreferenceSupportsBothLargerAndSmallerBatches() {
+        CraftPattern<String> smallBatch = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("smallRaw", 1)), "smallBatch");
+        CraftPattern<String> largeBatch = new CraftPattern<>(
+                "A", 4, List.of(CraftInput.of("largeRaw", 1)), "largeBatch");
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(smallBatch).pattern(largeBatch)
+                .stock("smallRaw", 10).stock("largeRaw", 10)
+                .build();
+        CraftingRoutePolicy neutral = CraftingRoutePolicy.DEFAULT
+                .withStockSurplusPreference(0)
+                .withFast(false)
+                .withPathPreference(0);
+
+        CraftPlan<String> morePlan = CraftPlannerV2.plan(
+                graph, "A", 1, neutral.withYieldPreference(1));
+        CraftPlan<String> lessPlan = CraftPlannerV2.plan(
+                graph, "A", 1, neutral.withYieldPreference(-1));
+
+        assertEquals(1L, firingsOf(morePlan, largeBatch));
+        assertEquals(0L, firingsOf(morePlan, smallBatch));
+        assertEquals(0L, firingsOf(lessPlan, largeBatch));
+        assertEquals(1L, firingsOf(lessPlan, smallBatch));
+    }
+
+    @Test
+    void stockSurplusPreferenceSupportsBothMoreAndLessCapacity() {
+        CraftPattern<String> scarceRoute = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("scarceRaw", 1)), "scarceRoute");
+        CraftPattern<String> abundantRoute = new CraftPattern<>(
+                "A", 1, List.of(CraftInput.of("abundantRaw", 1)), "abundantRoute");
+        CraftGraph<String> graph = CraftGraph.<String>builder()
+                .pattern(scarceRoute).pattern(abundantRoute)
+                .stock("scarceRaw", 2).stock("abundantRaw", 20)
+                .build();
+        CraftingRoutePolicy neutral = CraftingRoutePolicy.DEFAULT
+                .withYieldPreference(0)
+                .withFast(false)
+                .withPathPreference(0);
+
+        CraftPlan<String> morePlan = CraftPlannerV2.plan(
+                graph, "A", 1, neutral.withStockSurplusPreference(1));
+        CraftPlan<String> lessPlan = CraftPlannerV2.plan(
+                graph, "A", 1, neutral.withStockSurplusPreference(-1));
+
+        assertEquals(1L, firingsOf(morePlan, abundantRoute));
+        assertEquals(0L, firingsOf(morePlan, scarceRoute));
+        assertEquals(0L, firingsOf(lessPlan, abundantRoute));
+        assertEquals(1L, firingsOf(lessPlan, scarceRoute));
+    }
+
+    @Test
+    void routePolicySerializationPreservesReverseDirections() {
+        CraftingRoutePolicy policy = CraftingRoutePolicy.DEFAULT
+                .withPathPreference(1)
+                .withStockSurplusPreference(-1)
+                .withYieldPreference(-1);
+
+        assertEquals(policy, CraftingRoutePolicy.deserialize(policy.serialize()));
     }
 
     @Test
@@ -208,9 +275,11 @@ class CraftPlannerV2Test {
                 .build();
 
         CraftingRoutePolicy pathThenYield = CraftingRoutePolicy.DEFAULT
+                .withStockSurplusPreference(0)
+                .withFast(false)
                 .withPathPreference(-1)
                 .withHighYield(true);
-        CraftingRoutePolicy yieldThenPath = pathThenYield.moveCriterion(2, 0);
+        CraftingRoutePolicy yieldThenPath = pathThenYield.moveCriterion(3, 0);
 
         CraftPlan<String> pathFirstPlan = CraftPlannerV2.plan(graph, "A", 1, pathThenYield);
         CraftPlan<String> yieldFirstPlan = CraftPlannerV2.plan(graph, "A", 1, yieldThenPath);

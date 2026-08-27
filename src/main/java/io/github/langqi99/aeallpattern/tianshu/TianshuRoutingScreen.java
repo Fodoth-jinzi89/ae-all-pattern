@@ -5,8 +5,9 @@ import appeng.client.gui.AEBaseScreen;
 import appeng.client.gui.Icon;
 import appeng.client.gui.style.ScreenStyle;
 import appeng.client.gui.widgets.AETextField;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.client.RoutingPolicyEditor;
+import io.github.langqi99.aeallpattern.client.RoutingQualificationButton;
 import io.github.langqi99.aeallpattern.client.RoutingTooltipArea;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -17,6 +18,7 @@ public final class TianshuRoutingScreen extends AEBaseScreen<TianshuRoutingMenu>
     private final AETextField priorityField;
     private boolean changingPriority;
     private RoutingPolicyEditor routingEditor;
+    private RoutingQualificationButton byproductOrders;
 
     public TianshuRoutingScreen(
             TianshuRoutingMenu menu,
@@ -51,9 +53,15 @@ public final class TianshuRoutingScreen extends AEBaseScreen<TianshuRoutingMenu>
                         Component.translatable("gui.aeallpattern.routing.feasible"),
                         Component.translatable("gui.aeallpattern.routing.feasible_details"),
                         Component.translatable("gui.aeallpattern.routing.feasible_locked"))));
+        byproductOrders = addRenderableWidget(new RoutingQualificationButton(
+                leftPos + 8,
+                topPos + 52,
+                160,
+                () -> menu.getPolicy().allowByproductOrders(),
+                enabled -> menu.updatePolicy(menu.getPolicy().withByproductOrders(enabled))));
         routingEditor = addRenderableWidget(new RoutingPolicyEditor(
                 leftPos + 8,
-                topPos + 54,
+                topPos + 69,
                 160,
                 menu::getPolicy,
                 menu::updatePolicy));

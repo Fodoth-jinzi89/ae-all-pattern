@@ -45,7 +45,6 @@ public final class AggregateGenerationService {
         if (recipes.size() != payload.totalRecipeCount()) {
             return;
         }
-
         var library = AggregatePatternLibrary.get(player.getServer());
         var ref = library.put(
                 player.getServer(), payload.catalystId(), payload.machineTranslationKey(), recipes);

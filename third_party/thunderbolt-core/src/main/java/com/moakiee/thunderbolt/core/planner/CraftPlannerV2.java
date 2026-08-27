@@ -590,17 +590,22 @@ public final class CraftPlannerV2<K> {
             long capacityB) {
         return switch (criterion) {
             case CraftingRoutePolicy.CRITERION_PATH -> comparePath(a, b);
-            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> routePolicy.preferStockSurplus()
-                    ? Long.compare(capacityB, capacityA)
-                    : 0;
-            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> routePolicy.preferHighYield()
-                    ? Long.compare(b.outputAmount(), a.outputAmount())
-                    : 0;
+            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> compareDirected(
+                    routePolicy.stockSurplusPreference(), capacityA, capacityB);
+            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> compareDirected(
+                    routePolicy.yieldPreference(), a.outputAmount(), b.outputAmount());
             case CraftingRoutePolicy.CRITERION_FAST -> routePolicy.preferFast()
                     ? compareWaitingTime(a, b)
                     : 0;
             default -> 0;
         };
+    }
+
+    /** Positive prefers the larger value, negative prefers the smaller value, zero ignores it. */
+    private int compareDirected(int preference, long valueA, long valueB) {
+        return preference > 0
+                ? Long.compare(valueB, valueA)
+                : preference < 0 ? Long.compare(valueA, valueB) : 0;
     }
 
     private int comparePath(CraftPattern<K> a, CraftPattern<K> b) {

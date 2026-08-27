@@ -1,8 +1,10 @@
 package io.github.langqi99.aeallpattern.client;
 
 import appeng.api.stacks.GenericStack;
+import appeng.api.stacks.AEItemKey;
 import appeng.core.definitions.AEBlocks;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternData;
+import io.github.langqi99.aeallpattern.aggregate.AggregateInputSlot;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternKind;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternLibrary;
 import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
@@ -13,12 +15,15 @@ import io.github.langqi99.aeallpattern.registry.ModItems;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.constants.RecipeTypes;
+import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.IFocus;
@@ -28,6 +33,7 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
@@ -43,6 +49,7 @@ import tamaized.ae2jeiintegration.api.integrations.jei.IngredientConverters;
 /** Converts any JEI catalyst's visible recipes into concrete AE generic-stack patterns. */
 public final class ClientJeiAggregateScanner {
     private static final int MAX_RECIPES = AggregatePatternData.MAX_RECIPES;
+    private static final int MAX_EXPLICIT_ALTERNATIVES_PER_SLOT = 48;
     private static long lastScanTick = Long.MIN_VALUE;
     private static BlockPos lastScanPos = BlockPos.ZERO;
 
@@ -156,32 +163,29 @@ public final class ClientJeiAggregateScanner {
             mezz.jei.api.gui.IRecipeLayoutDrawable<?> layout =
                     (mezz.jei.api.gui.IRecipeLayoutDrawable<?>) drawable.orElseThrow();
             var slots = layout.getRecipeSlotsView();
-            List<GenericStack> inputs = new ArrayList<>();
+            List<AggregateInputSlot> inputSlots = new ArrayList<>();
             boolean valid = true;
             for (IRecipeSlotView slot : slots.getSlotViews(RecipeIngredientRole.INPUT)) {
-                Optional<GenericStack> input = chooseStack(slot);
+                Optional<AggregateInputSlot> input = chooseInputSlot(slot);
                 if (input.isPresent()) {
-                    if (kind == AggregatePatternKind.PROCESSING) {
-                        merge(inputs, input.orElseThrow());
-                    } else {
-                        inputs.add(input.orElseThrow());
-                    }
+                    inputSlots.add(input.orElseThrow());
                 } else if (!slot.isEmpty()) {
                     valid = false;
                     break;
                 }
             }
-            List<GenericStack> outputs = slots.getSlotViews(RecipeIngredientRole.OUTPUT).stream()
-                    .map(ClientJeiAggregateScanner::chooseStack)
+            List<ScannedOutput> scannedOutputs = slots.getSlotViews(RecipeIngredientRole.OUTPUT).stream()
+                    .map(ClientJeiAggregateScanner::scanOutput)
                     .flatMap(Optional::stream)
                     .limit(3)
                     .toList();
-            if (!valid || inputs.isEmpty() || outputs.isEmpty() || inputs.size() > 9) {
+            List<GenericStack> outputs = scannedOutputs.stream().map(ScannedOutput::stack).toList();
+            if (!valid || inputSlots.isEmpty() || outputs.isEmpty() || inputSlots.size() > 9) {
                 index++;
                 continue;
             }
 
-            String normalizedInputs = inputs.stream().map(ClientJeiAggregateScanner::normalize).sorted()
+            String normalizedInputs = inputSlots.stream().map(ClientJeiAggregateScanner::normalizeSlot).sorted()
                     .reduce("", (left, right) -> left + "|" + right);
             String normalizedOutputs = outputs.stream().map(ClientJeiAggregateScanner::normalize).sorted()
                     .reduce("", (left, right) -> left + "|" + right);
@@ -202,8 +206,10 @@ public final class ClientJeiAggregateScanner {
                                 ? ResourceLocation.fromNamespaceAndPath("aeallpattern", "jei/" + patternId.substring(0, 32))
                                 : originalId,
                         kind,
-                        inputs,
+                        inputSlots.stream().map(AggregateInputSlot::primary).toList(),
+                        inputSlots,
                         outputs,
+                        probabilisticOutputMask(scannedOutputs),
                         200));
             }
             index++;
@@ -229,6 +235,108 @@ public final class ClientJeiAggregateScanner {
                 .flatMap(Optional::stream)
                 .filter(stack -> stack.what() != null && stack.amount() > 0)
                 .sorted(Comparator.comparing(ClientJeiAggregateScanner::normalize))
+                .findFirst();
+    }
+
+    private static Optional<ScannedOutput> scanOutput(IRecipeSlotView slot) {
+        return chooseStack(slot).map(stack -> new ScannedOutput(stack, isProbabilistic(slot)));
+    }
+
+    private static int probabilisticOutputMask(List<ScannedOutput> outputs) {
+        int mask = 0;
+        for (int index = 0; index < outputs.size(); index++) {
+            if (outputs.get(index).probabilistic()) {
+                mask |= 1 << index;
+            }
+        }
+        return mask;
+    }
+
+    /**
+     * JEI has no dedicated probability field, but recipe integrations expose chance information
+     * through the output slot name or its tooltip callback. Inspect those semantic labels while
+     * deliberately skipping the first tooltip line (the ingredient name) to avoid treating an item
+     * whose own name contains "chance" as a probabilistic output.
+     */
+    private static boolean isProbabilistic(IRecipeSlotView slot) {
+        if (slot.getSlotName().map(ClientJeiAggregateScanner::containsProbabilityMarker).orElse(false)) {
+            return true;
+        }
+        if (!(slot instanceof IRecipeSlotDrawable drawable)) {
+            return false;
+        }
+        try {
+            List<Component> tooltip = drawable.getTooltip();
+            for (int index = 1; index < tooltip.size(); index++) {
+                Component line = tooltip.get(index);
+                if (containsProbabilityMarker(line.getString())
+                        || containsProbabilityMarker(line.getContents().toString())) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException error) {
+            io.github.langqi99.aeallpattern.AeAllPattern.LOGGER.debug(
+                    "JEI output tooltip rejected probability inspection", error);
+        }
+        return false;
+    }
+
+    private static boolean containsProbabilityMarker(String text) {
+        String normalized = text.toLowerCase(Locale.ROOT);
+        return normalized.contains("chance")
+                || normalized.contains("probab")
+                || normalized.contains("random output")
+                || normalized.contains("概率")
+                || normalized.contains("几率")
+                || normalized.contains("機率")
+                || normalized.contains("確率")
+                || normalized.contains("확률");
+    }
+
+    private static Optional<AggregateInputSlot> chooseInputSlot(IRecipeSlotView slot) {
+        LinkedHashMap<String, GenericStack> unique = new LinkedHashMap<>();
+        slot.getAllIngredients()
+                .map(ClientJeiAggregateScanner::toGenericStack)
+                .flatMap(Optional::stream)
+                .filter(stack -> stack.what() != null && stack.amount() > 0)
+                .sorted(Comparator.comparing(ClientJeiAggregateScanner::normalize))
+                .limit(AggregateInputSlot.MAX_ALTERNATIVES)
+                .forEach(stack -> unique.putIfAbsent(normalize(stack), stack));
+        if (unique.isEmpty()) {
+            return Optional.empty();
+        }
+        List<GenericStack> candidates = List.copyOf(unique.values());
+        Optional<ResourceLocation> itemTag = exactItemTag(candidates);
+        if (itemTag.isPresent()) {
+            // The tag will be resolved from the server's current datapack. Keep
+            // only one concrete fallback so large tags never inflate packets.
+            return Optional.of(new AggregateInputSlot(
+                    List.of(candidates.getFirst()), itemTag));
+        }
+        return Optional.of(new AggregateInputSlot(
+                candidates.stream().limit(MAX_EXPLICIT_ALTERNATIVES_PER_SLOT).toList(),
+                Optional.empty()));
+    }
+
+    private static Optional<ResourceLocation> exactItemTag(List<GenericStack> candidates) {
+        if (candidates.isEmpty()
+                || candidates.stream().anyMatch(stack -> !(stack.what() instanceof AEItemKey))
+                || candidates.stream().mapToLong(GenericStack::amount).distinct().count() != 1) {
+            return Optional.empty();
+        }
+        Set<net.minecraft.world.item.Item> candidateItems = candidates.stream()
+                .map(GenericStack::what)
+                .map(AEItemKey.class::cast)
+                .map(AEItemKey::getItem)
+                .collect(java.util.stream.Collectors.toSet());
+        return BuiltInRegistries.ITEM.getTagNames()
+                .filter(tag -> BuiltInRegistries.ITEM.getTag(tag)
+                        .map(named -> named.size() == candidateItems.size()
+                                && named.stream().allMatch(holder -> candidateItems.contains(holder.value())))
+                        .orElse(false))
+                .map(net.minecraft.tags.TagKey::location)
+                .sorted(Comparator.comparingInt((ResourceLocation id) -> id.toString().length())
+                        .thenComparing(ResourceLocation::toString))
                 .findFirst();
     }
 
@@ -260,20 +368,17 @@ public final class ClientJeiAggregateScanner {
         }
     }
 
-    private static void merge(List<GenericStack> stacks, GenericStack addition) {
-        for (int index = 0; index < stacks.size(); index++) {
-            GenericStack existing = stacks.get(index);
-            if (existing.what().equals(addition.what())) {
-                stacks.set(index, new GenericStack(existing.what(), Math.addExact(existing.amount(), addition.amount())));
-                return;
-            }
-        }
-        stacks.add(addition);
-    }
-
     private static String normalize(GenericStack stack) {
         return stack.what().getType().getId() + "*" + stack.what().getId()
                 + "*" + stack.amount() + "*" + stack.what();
+    }
+
+    private static String normalizeSlot(AggregateInputSlot slot) {
+        String tag = slot.itemTag().map(ResourceLocation::toString).orElse("-");
+        return tag + slot.alternatives().stream()
+                .map(ClientJeiAggregateScanner::normalize)
+                .sorted()
+                .reduce("", (left, right) -> left + "+" + right);
     }
 
     private static void show(String key) {
@@ -281,6 +386,9 @@ public final class ClientJeiAggregateScanner {
         if (player != null) {
             player.displayClientMessage(Component.translatable(key), true);
         }
+    }
+
+    private record ScannedOutput(GenericStack stack, boolean probabilistic) {
     }
 
 }

@@ -7,10 +7,12 @@ import appeng.client.gui.widgets.AETextField;
 import appeng.client.gui.widgets.ITooltip;
 import appeng.client.gui.me.crafting.CraftConfirmScreen;
 import appeng.menu.me.crafting.CraftConfirmMenu;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import appeng.api.stacks.GenericStack;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.client.RoutingOptionButton;
 import io.github.langqi99.aeallpattern.client.RoutingPolicyEditor;
 import io.github.langqi99.aeallpattern.client.RoutingPolicyPanelBackground;
+import io.github.langqi99.aeallpattern.client.RoutingQualificationButton;
 import io.github.langqi99.aeallpattern.client.RoutingTooltipArea;
 import io.github.langqi99.aeallpattern.tianshu.CraftConfirmRoutingMenu;
 import java.util.List;
@@ -31,7 +33,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
     @Unique
     private static final int AEALLPATTERN_PANEL_WIDTH = 184;
     @Unique
-    private static final int AEALLPATTERN_PANEL_HEIGHT = 120;
+    private static final int AEALLPATTERN_PANEL_HEIGHT = 137;
 
     @Unique
     private RoutingOptionButton aeallpattern$routeButton;
@@ -43,6 +45,8 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
     private AETextField aeallpattern$priorityField;
     @Unique
     private RoutingTooltipArea aeallpattern$feasibilityHelp;
+    @Unique
+    private RoutingQualificationButton aeallpattern$byproductOrders;
     @Unique
     private boolean aeallpattern$expanded;
     @Unique
@@ -104,9 +108,16 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
                         Component.translatable("gui.aeallpattern.routing.feasible_details"),
                         Component.translatable("gui.aeallpattern.routing.feasible_locked"))));
 
-        aeallpattern$editor = addRenderableWidget(new RoutingPolicyEditor(
+        aeallpattern$byproductOrders = addRenderableWidget(new RoutingQualificationButton(
                 panelX + 4,
                 panelY + 37,
+                AEALLPATTERN_PANEL_WIDTH - 8,
+                () -> policy().allowByproductOrders(),
+                enabled -> update(policy().withByproductOrders(enabled))));
+
+        aeallpattern$editor = addRenderableWidget(new RoutingPolicyEditor(
+                panelX + 4,
+                panelY + 54,
                 AEALLPATTERN_PANEL_WIDTH - 8,
                 this::policy,
                 this::update));
@@ -125,6 +136,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
         aeallpattern$panel.visible = showPanel;
         aeallpattern$priorityField.visible = showPanel;
         aeallpattern$feasibilityHelp.visible = showPanel;
+        aeallpattern$byproductOrders.visible = showPanel;
         aeallpattern$editor.visible = showPanel;
         if (!showPanel) {
             aeallpattern$priorityField.setFocused(false);
@@ -148,13 +160,16 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
         aeallpattern$priorityField.setY(panelY + 3);
         aeallpattern$feasibilityHelp.setX(panelX + 4);
         aeallpattern$feasibilityHelp.setY(panelY + 20);
+        aeallpattern$byproductOrders.setX(panelX + 4);
+        aeallpattern$byproductOrders.setY(panelY + 37);
         aeallpattern$editor.setX(panelX + 4);
-        aeallpattern$editor.setY(panelY + 37);
+        aeallpattern$editor.setY(panelY + 54);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
+        aeallpattern$renderByproductWarning(graphics);
         if (!aeallpattern$expanded || !routingMenu().aeallpattern$isRoutingAvailable()
                 || aeallpattern$panel == null) {
             return;
@@ -172,15 +187,38 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
             aeallpattern$panel.render(graphics, mouseX, mouseY, partialTick);
             aeallpattern$priorityField.render(graphics, mouseX, mouseY, partialTick);
             aeallpattern$feasibilityHelp.render(graphics, mouseX, mouseY, partialTick);
+            aeallpattern$byproductOrders.render(graphics, mouseX, mouseY, partialTick);
             aeallpattern$editor.render(graphics, mouseX, mouseY, partialTick);
 
             if (!aeallpattern$renderTooltip(graphics, mouseX, mouseY, aeallpattern$editor)
+                    && !aeallpattern$renderTooltip(graphics, mouseX, mouseY, aeallpattern$byproductOrders)
                     && !aeallpattern$renderTooltip(graphics, mouseX, mouseY, aeallpattern$feasibilityHelp)) {
                 aeallpattern$renderTooltip(graphics, mouseX, mouseY, aeallpattern$priorityField);
             }
         } finally {
             graphics.pose().popPose();
         }
+    }
+
+    @Unique
+    private void aeallpattern$renderByproductWarning(GuiGraphics graphics) {
+        GenericStack warning = routingMenu().aeallpattern$getByproductWarning();
+        if (warning == null || warning.what() == null || warning.amount() <= 0) {
+            return;
+        }
+        int kinds = routingMenu().aeallpattern$getByproductWarningKinds();
+        Component text = kinds > 1
+                ? Component.translatable(
+                        "gui.aeallpattern.routing.byproduct_warning_many",
+                        warning.what().getDisplayName(), warning.amount(), kinds)
+                : Component.translatable(
+                        "gui.aeallpattern.routing.byproduct_warning",
+                        warning.what().getDisplayName(), warning.amount());
+        int x = getGuiLeft() + (imageWidth - font.width(text)) / 2;
+        int y = getGuiTop() + imageHeight - 45;
+        graphics.fill(x - 5, y - 3, x + font.width(text) + 5, y + 11, 0xDD3B2510);
+        graphics.renderOutline(x - 5, y - 3, font.width(text) + 10, 14, 0xFFE09A3E);
+        graphics.drawString(font, text, x, y, 0xFFFFD27A, false);
     }
 
     @Unique
@@ -234,6 +272,10 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
                 // Dispatch directly so AE's crafting table and tooltip layer
                 // cannot consume a row click before it toggles the criterion.
                 return aeallpattern$editor.mouseClicked(mouseX, mouseY, button);
+            }
+            if (aeallpattern$byproductOrders.visible
+                    && aeallpattern$byproductOrders.isMouseOver(mouseX, mouseY)) {
+                return aeallpattern$byproductOrders.mouseClicked(mouseX, mouseY, button);
             }
             if (aeallpattern$priorityField.visible
                     && aeallpattern$priorityField.isMouseOver(mouseX, mouseY)) {

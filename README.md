@@ -6,9 +6,11 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 
 ## 当前状态
 
-**0.1.0 MVP 已完成。** 链接器是占用一个频道、消耗 2 AE/t 的真实 AE 节点；绑定器、世界持久化、紫色包围框、虚拟处理样板、安全输入缓冲、诊断命令和可选 Mekanism/JEI 集成都已实现。自动化测试同时覆盖只有 AE2 的最小专服和安装 JEI + Mekanism 的完整环境。
+**当前版本为 0.1.5。** 链接器是占用一个频道、消耗 2 AE/t 的真实 AE 节点；绑定器、世界持久化、紫色包围框、虚拟处理样板、安全输入缓冲、诊断命令和可选 Mekanism/JEI 集成都已实现。自动化测试同时覆盖只有 AE2 的最小专服和安装 JEI + Mekanism 的完整环境。
 
-“天枢样版路由器”的第一阶段也已接入：它是一个可六面接入 AE 网络的单方块，提供 Thunderbolt 快速下单规划和动态样版路由，但不会向网络注册为合成 CPU。方块在线时会切换为发光模型；规划出的任务仍由玩家搭建的普通 AE 合成 CPU 执行。
+“天枢样版路由器”的第一阶段也已接入：它是一个可六面接入 AE 网络的单方块，使用模组内置的私有规划引擎提供快速下单和动态样版路由，但不会向网络注册为合成 CPU。方块在线时会切换为发光模型；规划出的任务仍由玩家搭建的普通 AE 合成 CPU 执行。它不要求安装闪电科技，也不会接管闪电科技自己的 CPU；若两者同时安装，闪电科技普通 CPU 仍完全使用玩家所安装版本的 Thunderbolt 逻辑。
+
+生存成本按能力分层：绑定器需要空白样版与福鲁伊克斯水晶；链接器需要样板供应器和工程处理器；全样版生成器需要计算处理器与高级卡；天枢路由器还需要两张高级卡、两个计算处理器和一个工程处理器。绑定器与生成器都是永久工具，使用时不掉耐久，也不消耗额外材料。
 
 ## 目标交互
 
@@ -33,12 +35,12 @@ AE All Pattern 是面向 Applied Energistics 2 的附属模组原型。玩家先
 
 | 组件 | 基线 |
 | --- | --- |
-| AE All Pattern | 0.1.0 |
+| AE All Pattern | 0.1.5 |
 | Minecraft | 1.21.1 |
 | 加载器 | NeoForge 21.1.219+ |
 | Java | 21 |
 | Applied Energistics 2 | 19.2.17 |
-| Thunderbolt Core | 1.0.0 源码内嵌（快速规划 / 动态路线选择） |
+| 私有路由引擎 | 内置于 AE All Pattern（快速规划 / 动态路线选择） |
 | JEI | 可选，全样板生成器的通用配方发现 |
 | AE2 JEI Integration | 可选，把 JEI 原料类型转换为 AE 通用键 |
 | Mekanism | 可选，冶炼、粉碎、富集机器与工厂 |
@@ -67,8 +69,8 @@ Applied Mekanistics 与 AE2 JEI Integration 后，Mekanism 气体及统一 Chemi
 ./gradlew clean check build
 ```
 
-完整说明从 [文档索引](docs/index.md) 开始；[当前支持矩阵](docs/product/support-matrix.md) 和 [已知限制](docs/product/limitations.md) 描述 0.1.0 的准确边界，后续计划见 [实施路线图](docs/roadmap.md)。
+完整说明从 [文档索引](docs/index.md) 开始；[当前支持矩阵](docs/product/support-matrix.md) 和 [已知限制](docs/product/limitations.md) 描述 0.1.5 的准确边界，后续计划见 [实施路线图](docs/roadmap.md)。
 
 ## 许可证
 
-本项目自有代码使用 MIT License。Thunderbolt Core 和源自 AE2 Lightning Tech 的单方块 CPU 代码按 LGPL-3.0 保留；天枢控制器模型与贴图按 CC BY-NC-SA 3.0 保留。完整来源见 [NOTICE.md](NOTICE.md) 与 [许可和素材政策](docs/development/licensing-and-assets.md)。
+本项目自有代码使用 MIT License。私有路由引擎中移植的 Thunderbolt Core 代码和源自 AE2 Lightning Tech 的单方块宿主代码按 LGPL-3.0 保留；天枢控制器模型与贴图按 CC BY-NC-SA 3.0 保留。完整来源见 [NOTICE.md](NOTICE.md) 与 [许可和素材政策](docs/development/licensing-and-assets.md)。

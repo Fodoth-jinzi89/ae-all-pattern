@@ -2,7 +2,7 @@ package io.github.langqi99.aeallpattern.client;
 
 import appeng.client.gui.Icon;
 import appeng.client.gui.widgets.ITooltip;
-import com.moakiee.thunderbolt.ae2.crafting.CraftingRoutePolicy;
+import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -264,26 +264,30 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
 
     private static CraftingRoutePolicy cycle(CraftingRoutePolicy policy, int criterion, boolean reverse) {
         return switch (criterion) {
-            case CraftingRoutePolicy.CRITERION_PATH -> {
-                int next = reverse
-                        ? (policy.pathPreference() <= -1 ? 0 : policy.pathPreference() - 1)
-                        : (policy.pathPreference() >= 1 ? 0 : policy.pathPreference() + 1);
-                yield policy.withPathPreference(next);
-            }
+            case CraftingRoutePolicy.CRITERION_PATH ->
+                    policy.withPathPreference(cycleDirection(policy.pathPreference(), reverse));
             case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS ->
-                    policy.withStockSurplus(!policy.preferStockSurplus());
+                    policy.withStockSurplusPreference(
+                            cycleDirection(policy.stockSurplusPreference(), reverse));
             case CraftingRoutePolicy.CRITERION_HIGH_YIELD ->
-                    policy.withHighYield(!policy.preferHighYield());
+                    policy.withYieldPreference(cycleDirection(policy.yieldPreference(), reverse));
             case CraftingRoutePolicy.CRITERION_FAST -> policy.withFast(!policy.preferFast());
             default -> policy;
         };
     }
 
+    /** Cycles all three visible states so neither direction is hidden behind a specific mouse button. */
+    private static int cycleDirection(int current, boolean reverse) {
+        return reverse
+                ? (current <= -1 ? 1 : current - 1)
+                : (current >= 1 ? -1 : current + 1);
+    }
+
     private static boolean enabled(CraftingRoutePolicy policy, int criterion) {
         return switch (criterion) {
             case CraftingRoutePolicy.CRITERION_PATH -> policy.pathPreference() != 0;
-            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> policy.preferStockSurplus();
-            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> policy.preferHighYield();
+            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> policy.stockSurplusPreference() != 0;
+            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> policy.yieldPreference() != 0;
             case CraftingRoutePolicy.CRITERION_FAST -> policy.preferFast();
             default -> false;
         };
@@ -294,9 +298,12 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
             case CraftingRoutePolicy.CRITERION_PATH -> policy.pathPreference() < 0
                     ? Icon.ARROW_LEFT
                     : policy.pathPreference() > 0 ? Icon.ARROW_RIGHT : Icon.S_CYCLE;
-            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> policy.preferStockSurplus()
-                    ? Icon.FULLNESS_FULL : Icon.FULLNESS_EMPTY;
-            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> Icon.ARROW_UP;
+            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> policy.stockSurplusPreference() > 0
+                    ? Icon.FULLNESS_FULL
+                    : policy.stockSurplusPreference() < 0 ? Icon.FULLNESS_EMPTY : Icon.S_CYCLE;
+            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> policy.yieldPreference() > 0
+                    ? Icon.ARROW_UP
+                    : policy.yieldPreference() < 0 ? Icon.ARROW_DOWN : Icon.S_CYCLE;
             case CraftingRoutePolicy.CRITERION_FAST -> policy.preferFast() ? Icon.COG : Icon.COG_DISABLED;
             default -> Icon.S_CYCLE;
         };
@@ -320,8 +327,12 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
             case CraftingRoutePolicy.CRITERION_PATH -> policy.pathPreference() < 0
                     ? "gui.aeallpattern.routing.path_short"
                     : "gui.aeallpattern.routing.path_long";
-            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> "gui.aeallpattern.routing.more";
-            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> "gui.aeallpattern.routing.high";
+            case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS -> policy.stockSurplusPreference() > 0
+                    ? "gui.aeallpattern.routing.more"
+                    : "gui.aeallpattern.routing.less";
+            case CraftingRoutePolicy.CRITERION_HIGH_YIELD -> policy.yieldPreference() > 0
+                    ? "gui.aeallpattern.routing.more"
+                    : "gui.aeallpattern.routing.less";
             case CraftingRoutePolicy.CRITERION_FAST -> "gui.aeallpattern.routing.waiting_value";
             default -> "gui.aeallpattern.routing.disabled";
         });
@@ -349,9 +360,17 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
                             ? "gui.aeallpattern.routing.path_details_long"
                             : "gui.aeallpattern.routing.path_details_off";
             case CraftingRoutePolicy.CRITERION_STOCK_SURPLUS ->
-                    "gui.aeallpattern.routing.surplus_details";
+                    policy.stockSurplusPreference() < 0
+                            ? "gui.aeallpattern.routing.surplus_details_less"
+                            : policy.stockSurplusPreference() > 0
+                                    ? "gui.aeallpattern.routing.surplus_details_more"
+                                    : "gui.aeallpattern.routing.surplus_details_off";
             case CraftingRoutePolicy.CRITERION_HIGH_YIELD ->
-                    "gui.aeallpattern.routing.yield_details";
+                    policy.yieldPreference() < 0
+                            ? "gui.aeallpattern.routing.yield_details_less"
+                            : policy.yieldPreference() > 0
+                                    ? "gui.aeallpattern.routing.yield_details_more"
+                                    : "gui.aeallpattern.routing.yield_details_off";
             case CraftingRoutePolicy.CRITERION_FAST ->
                     "gui.aeallpattern.routing.waiting_details";
             default -> "gui.aeallpattern.routing.disabled";

@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +47,8 @@ class ModResourcesTest {
                 "assets/aeallpattern/models/block/tianshu_pattern_selector.json",
                 "assets/aeallpattern/models/block/tianshu_pattern_selector_active.json",
                 "assets/aeallpattern/models/item/tianshu_pattern_selector.json",
-                "data/aeallpattern/loot_table/blocks/tianshu_pattern_selector.json")) {
+                "data/aeallpattern/loot_table/blocks/tianshu_pattern_selector.json",
+                "data/aeallpattern/recipe/tianshu_pattern_selector.json")) {
             assertTrue(Files.isRegularFile(RESOURCES.resolve(relative)), () -> "missing resource: " + relative);
         }
         for (String relative : List.of(
@@ -56,6 +58,22 @@ class ModResourcesTest {
             assertEquals(64, image.getWidth(), () -> "unexpected texture width: " + relative);
             assertEquals(64, image.getHeight(), () -> "unexpected texture height: " + relative);
             assertTrue(image.getColorModel().hasAlpha(), () -> "texture must retain alpha: " + relative);
+        }
+
+        Path activeModel = RESOURCES.resolve("assets/aeallpattern/models/block/tianshu_pattern_selector_active.json");
+        try (var reader = Files.newBufferedReader(activeModel)) {
+            var root = JsonParser.parseReader(reader).getAsJsonObject();
+            var elements = root.getAsJsonArray("elements");
+            var baseFaces = elements.get(0).getAsJsonObject().getAsJsonObject("faces");
+            assertEquals(
+                    Set.of("north", "east", "south", "west", "up", "down"),
+                    baseFaces.keySet(),
+                    "active Tianshu model must render every outer base face");
+            var activeScreen = elements.get(5)
+                    .getAsJsonObject()
+                    .getAsJsonObject("faces")
+                    .getAsJsonObject("north");
+            assertEquals("#active", activeScreen.get("texture").getAsString());
         }
     }
 

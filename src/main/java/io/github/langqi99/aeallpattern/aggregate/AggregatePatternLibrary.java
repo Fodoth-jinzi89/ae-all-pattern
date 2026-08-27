@@ -198,9 +198,21 @@ public final class AggregatePatternLibrary extends SavedData {
                 raw.putString("RecipeId", recipe.recipeId().toString());
                 raw.putString("Kind", recipe.kind().serializedName());
                 raw.putInt("ProcessingTicks", recipe.processingTicks());
+                raw.putInt("ProbabilisticOutputMask", recipe.probabilisticOutputMask());
                 ListTag inputs = new ListTag();
                 recipe.inputs().forEach(stack -> inputs.add(GenericStack.writeTag(registries, stack)));
                 raw.put("GenericInputs", inputs);
+                ListTag inputSlots = new ListTag();
+                for (AggregateInputSlot slot : recipe.inputSlots()) {
+                    CompoundTag slotTag = new CompoundTag();
+                    ListTag alternatives = new ListTag();
+                    slot.alternatives().forEach(stack ->
+                            alternatives.add(GenericStack.writeTag(registries, stack)));
+                    slotTag.put("Alternatives", alternatives);
+                    slot.itemTag().ifPresent(tagId -> slotTag.putString("ItemTag", tagId.toString()));
+                    inputSlots.add(slotTag);
+                }
+                raw.put("InputSlots", inputSlots);
                 ListTag outputs = new ListTag();
                 recipe.outputs().forEach(stack -> outputs.add(GenericStack.writeTag(registries, stack)));
                 raw.put("GenericOutputs", outputs);
@@ -216,12 +228,15 @@ public final class AggregatePatternLibrary extends SavedData {
                 CompoundTag raw = (CompoundTag) recipeTag;
                 try {
                     List<GenericStack> inputs = parseStacks(raw, "GenericInputs", "Inputs", registries);
+                    List<AggregateInputSlot> inputSlots = parseInputSlots(raw, inputs, registries);
                     List<GenericStack> outputs = parseStacks(raw, "GenericOutputs", "Outputs", registries);
                     recipes.add(new AggregateRecipe(
                             raw.getString("PatternId"),
                             ResourceLocation.parse(raw.getString("RecipeId")),
                             AggregatePatternKind.fromName(raw.getString("Kind")),
-                            inputs, outputs, raw.getInt("ProcessingTicks")));
+                            inputs, inputSlots, outputs,
+                            raw.getInt("ProbabilisticOutputMask"),
+                            raw.getInt("ProcessingTicks")));
                 } catch (RuntimeException error) {
                     AeAllPattern.LOGGER.warn("Skipping unreadable aggregate recipe page entry", error);
                 }
@@ -248,6 +263,32 @@ public final class AggregatePatternLibrary extends SavedData {
                 stacks.add(stack);
             }
             return stacks;
+        }
+
+        private static List<AggregateInputSlot> parseInputSlots(
+                CompoundTag recipe,
+                List<GenericStack> legacyInputs,
+                HolderLookup.Provider registries) {
+            if (!recipe.contains("InputSlots", Tag.TAG_LIST)) {
+                return legacyInputs.stream().map(AggregateInputSlot::exact).toList();
+            }
+            List<AggregateInputSlot> slots = new ArrayList<>();
+            for (Tag rawSlot : recipe.getList("InputSlots", Tag.TAG_COMPOUND)) {
+                CompoundTag slotTag = (CompoundTag) rawSlot;
+                List<GenericStack> alternatives = new ArrayList<>();
+                for (Tag rawAlternative : slotTag.getList("Alternatives", Tag.TAG_COMPOUND)) {
+                    GenericStack stack = GenericStack.readTag(registries, (CompoundTag) rawAlternative);
+                    if (stack == null || stack.what() == null || stack.amount() <= 0) {
+                        throw new IllegalArgumentException("empty alternative in aggregate input slot");
+                    }
+                    alternatives.add(stack);
+                }
+                Optional<ResourceLocation> itemTag = slotTag.contains("ItemTag", Tag.TAG_STRING)
+                        ? Optional.of(ResourceLocation.parse(slotTag.getString("ItemTag")))
+                        : Optional.empty();
+                slots.add(new AggregateInputSlot(alternatives, itemTag));
+            }
+            return List.copyOf(slots);
         }
     }
 }
