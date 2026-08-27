@@ -1,12 +1,16 @@
 package io.github.langqi99.aeallpattern.mixin;
 
 import appeng.api.crafting.IPatternDetails;
+import appeng.api.crafting.PatternDetailsHelper;
+import appeng.api.networking.IManagedGridNode;
+import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.stacks.AEKey;
 import appeng.helpers.patternprovider.PatternProviderLogic;
 import appeng.helpers.patternprovider.PatternProviderLogicHost;
 import appeng.util.inv.AppEngInternalInventory;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternMarkerDetails;
+import io.github.langqi99.aeallpattern.compat.TechStartPatternCompat;
 import java.util.List;
 import java.util.Set;
 import org.spongepowered.asm.mixin.Final;
@@ -35,16 +39,24 @@ public abstract class PatternProviderLogicMixin {
     @Final
     private Set<AEKey> patternInputs;
 
-    @Inject(method = "updatePatterns", at = @At(
-            value = "INVOKE",
-            target = "Lappeng/api/networking/crafting/ICraftingProvider;requestUpdate(Lappeng/api/networking/IManagedGridNode;)V",
-            shift = At.Shift.BEFORE))
+    @Shadow @Final private IManagedGridNode mainNode;
+
+    @Inject(method = "updatePatterns", at = @At("HEAD"), cancellable = true)
     private void aeallpattern$expandAggregatePatterns(CallbackInfo callback) {
+        patterns.clear();
+        patternInputs.clear();
         patterns.removeIf(AggregatePatternMarkerDetails.class::isInstance);
         var level = host.getBlockEntity().getLevel();
         if (level != null) {
             for (var stack : patternInventory) {
-                patterns.addAll(AggregatePatternExpander.expand(stack, level));
+                var expanded = TechStartPatternCompat.expand(stack, level);
+                if (expanded.isEmpty()) expanded = AggregatePatternExpander.expand(stack, level);
+                if (expanded.isEmpty()) {
+                    var decoded = PatternDetailsHelper.decodePattern(stack, level);
+                    if (decoded != null) patterns.add(decoded);
+                } else {
+                    patterns.addAll(expanded);
+                }
             }
         }
 
@@ -56,5 +68,7 @@ public abstract class PatternProviderLogicMixin {
                 }
             }
         }
+        ICraftingProvider.requestUpdate(mainNode);
+        callback.cancel();
     }
 }

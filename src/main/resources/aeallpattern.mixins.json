@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "io.github.langqi99.aeallpattern.mixin",
+  "plugin": "io.github.langqi99.aeallpattern.mixin.AeAllPatternMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "AEBaseMenuAccessor",
@@ -10,11 +11,15 @@
     "TianshuCraftingCalculationMixin",
     "CraftingServiceSecondaryOutputMixin",
     "PatternProviderLogicMixin",
+    "BindingValidatorContextMixin",
+    "ECOCraftingPatternBusBlockEntityMixin",
     "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"
   ],
   "client": [
-    "client.CraftConfirmScreenRoutingMixin"
+    "client.CraftConfirmScreenRoutingMixin",
+    "client.ClientJeiAggregateScannerMixin",
+    "client.ClientEventsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

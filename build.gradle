@@ -16,6 +16,7 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
     mavenCentral()
+    maven { url = 'https://api.modrinth.com/maven' }
     maven { url = 'https://modmaven.dev/' }
     maven { url = 'https://maven.blamejared.com' }
     // The public endpoint redirects binary artifacts into /releases. Pointing
@@ -104,6 +105,10 @@ configurations {
 dependencies {
     // AE2 is required and supplies the public crafting-provider API.
     implementation "org.appliedenergistics:appliedenergistics2:${ae2_version}"
+
+    // Optional client recipe-viewer bridge used only when EMI and TMRV are present.
+    compileOnly "maven.modrinth:emi:1.1.24+1.21.1+neoforge"
+    compileOnly "maven.modrinth:yFypjcfd:pEhG9g9P"
 
     // Mekanism is optional. Keep its classes out of common signatures and load adapters conditionally.
     compileOnly "mekanism:Mekanism:${mekanism_version}:api"
