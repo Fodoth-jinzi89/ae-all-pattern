@@ -64,7 +64,8 @@ public final class AggregatePatternExpander {
                 }
                 IPatternDetails delegate = PatternDetailsHelper.decodePattern(encoded, level);
                 if (delegate == null) {
-                    AeAllPattern.LOGGER.warn("AE2 rejected aggregate child pattern {}", recipe.recipeId());
+                    // Third-party recipes can be visible to the scanner but not encodable by AE2.
+                    // Skip them quietly; one rejected child must not flood the server log.
                     continue;
                 }
 
@@ -79,7 +80,7 @@ public final class AggregatePatternExpander {
                             recipe.patternId(), definition, delegate, recipe.processingTicks(), configuredInputs));
                 }
             } catch (RuntimeException error) {
-                AeAllPattern.LOGGER.warn(
+                AeAllPattern.LOGGER.debug(
                         "Failed to expand aggregate child {} as {}", recipe.recipeId(), recipe.kind(), error);
             }
         }
