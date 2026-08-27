@@ -1,11 +1,13 @@
 package io.github.langqi99.aeallpattern.compat.emi;
 
 import appeng.api.stacks.GenericStack;
+import appeng.api.integrations.emi.EmiStackConverters;
 import dev.emi.emi.api.EmiApi;
 import dev.emi.emi.api.recipe.*;
 import dev.emi.emi.api.stack.*;
 import dev.nolij.toomanyrecipeviewers.impl.ingredient.TMRVStack;
 import io.github.langqi99.aeallpattern.aggregate.*;
+import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.network.GenerateAggregatePayload;
 import io.netty.buffer.Unpooled;
 import java.lang.reflect.Method;
@@ -58,12 +60,32 @@ public final class EmiAggregateScanner {
             List<EmiRecipe> candidates, RegistryAccess registries, ConnectionType connectionType) {
         List<AggregateRecipe> recipes = new ArrayList<>();
         Set<String> ids = new HashSet<>();
+        int rejected = 0;
+        int encodingFailed = 0;
+        RuntimeException firstError = null;
         for (EmiRecipe recipe : candidates) {
-            try { toAggregate(recipe, ids).filter(r -> canEncode(r, registries, connectionType)).ifPresent(recipes::add); }
-            catch (RuntimeException ignored) {}
+            try {
+                Optional<AggregateRecipe> converted = toAggregate(recipe, ids);
+                if (converted.isEmpty()) {
+                    rejected++;
+                } else if (canEncode(converted.orElseThrow(), registries, connectionType)) {
+                    recipes.add(converted.orElseThrow());
+                } else {
+                    encodingFailed++;
+                }
+            } catch (RuntimeException error) {
+                rejected++;
+                if (firstError == null) firstError = error;
+            }
             if (recipes.size() >= AggregatePatternData.MAX_RECIPES) break;
         }
-        if (recipes.isEmpty()) return;
+        AeAllPattern.LOGGER.info(
+                "EMI aggregate scan {}: candidates={}, accepted={}, rejected={}, encodingFailed={}",
+                catalystId, candidates.size(), recipes.size(), rejected, encodingFailed, firstError);
+        if (recipes.isEmpty()) {
+            Minecraft.getInstance().execute(() -> show("message.aeallpattern.generator.no_item_recipes"));
+            return;
+        }
         Minecraft.getInstance().execute(() -> {
             UUID uploadId = UUID.randomUUID();
             int pageCount = (recipes.size() + AggregatePatternLibrary.PAGE_SIZE - 1) / AggregatePatternLibrary.PAGE_SIZE;
@@ -95,7 +117,9 @@ public final class EmiAggregateScanner {
         List<GenericStack> outputs = recipe.getOutputs().stream().map(EmiAggregateScanner::stack).flatMap(Optional::stream).limit(3).toList();
         if (inputs.size() != recipe.getInputs().size() || outputs.isEmpty()) return Optional.empty();
         RecipeHolder<?> backing = recipe.getBackingRecipe();
-        if (backing != null && backing.value().isSpecial()) return Optional.empty();
+        if (backing != null && backing.value() instanceof CraftingRecipe && backing.value().isSpecial()) {
+            return Optional.empty();
+        }
         ResourceLocation id = backing == null ? recipe.getId() : backing.id();
         if (id == null) return Optional.empty();
         String patternId = recipe.getCategory().getId() + "/" + id;
@@ -112,6 +136,12 @@ public final class EmiAggregateScanner {
 
     private static Optional<GenericStack> stack(EmiStack stack) {
         if (stack.isEmpty() || stack.getAmount() <= 0) return Optional.empty();
+        for (var converter : EmiStackConverters.getConverters()) {
+            try {
+                GenericStack converted = converter.toGenericStack(stack);
+                if (converted != null) return Optional.of(converted);
+            } catch (RuntimeException ignored) {}
+        }
         ItemStack item = stack.getItemStack();
         if (!item.isEmpty()) { item.setCount((int) Math.min(Integer.MAX_VALUE, stack.getAmount())); return Optional.ofNullable(GenericStack.fromItemStack(item)); }
         if (stack.getKey() instanceof Fluid fluid) return Optional.ofNullable(GenericStack.fromFluidStack(
@@ -151,5 +181,10 @@ public final class EmiAggregateScanner {
         if (recipe != null && recipe.value() instanceof StonecutterRecipe) return AggregatePatternKind.STONECUTTING;
         if (recipe != null && recipe.value() instanceof SmithingRecipe) return AggregatePatternKind.SMITHING;
         return AggregatePatternKind.PROCESSING;
+    }
+
+    private static void show(String key) {
+        var player = Minecraft.getInstance().player;
+        if (player != null) player.displayClientMessage(net.minecraft.network.chat.Component.translatable(key), true);
     }
 }
