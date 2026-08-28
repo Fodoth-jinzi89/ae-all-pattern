@@ -1,0 +1,30 @@
+package io.github.langqi99.aeallpattern.config;
+
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+public final class AeAllPatternCommonConfig {
+    public static final ModConfigSpec SPEC;
+    public static final ModConfigSpec.IntValue LINKER_MAX_BINDING_DISTANCE;
+    public static final ModConfigSpec.BooleanValue LINKER_ALLOW_CROSS_DIMENSION;
+
+    static {
+        ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
+        builder.push("patternLinker");
+        LINKER_MAX_BINDING_DISTANCE = builder
+                .comment("Maximum same-dimension distance in blocks between a linker and a bound machine. 0 is unlimited.")
+                .defineInRange("maxBindingDistance", 0, 0, 30_000_000);
+        LINKER_ALLOW_CROSS_DIMENSION = builder
+                .comment("Whether a linker may bind machines in another dimension. Cross-dimension bindings ignore distance.")
+                .define("allowCrossDimension", true);
+        builder.pop();
+        SPEC = builder.build();
+    }
+
+    private AeAllPatternCommonConfig() {
+    }
+
+    public static double maxBindingDistanceSquared() {
+        double distance = LINKER_MAX_BINDING_DISTANCE.getAsInt();
+        return distance == 0 ? Double.POSITIVE_INFINITY : distance * distance;
+    }
+}

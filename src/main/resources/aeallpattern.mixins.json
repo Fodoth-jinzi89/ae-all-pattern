@@ -11,7 +11,6 @@
     "TianshuCraftingCalculationMixin",
     "CraftingServiceSecondaryOutputMixin",
     "PatternProviderLogicMixin",
-    "BindingValidatorContextMixin",
     "ECOCraftingPatternBusBlockEntityMixin",
     "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"

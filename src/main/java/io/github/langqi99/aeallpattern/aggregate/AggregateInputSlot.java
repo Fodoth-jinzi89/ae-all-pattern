@@ -21,7 +21,7 @@ import net.minecraft.world.level.Level;
 public record AggregateInputSlot(
         List<GenericStack> alternatives,
         Optional<ResourceLocation> itemTag) {
-    public static final int MAX_ALTERNATIVES = 256;
+    public static final int MAX_ALTERNATIVES = 32;
 
     private static final Codec<List<GenericStack>> ALTERNATIVES_CODEC = GenericStack.CODEC.listOf()
             .validate(AggregateInputSlot::validateAlternatives);

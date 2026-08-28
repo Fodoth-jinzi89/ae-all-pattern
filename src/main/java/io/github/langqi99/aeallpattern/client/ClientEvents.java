@@ -14,6 +14,8 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import io.github.langqi99.aeallpattern.registry.ModMenus;
 import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingScreen;
 import appeng.init.client.InitScreens;
@@ -37,6 +39,12 @@ public final class ClientEvents {
                 ModMenus.TIANSHU_ROUTING.get(),
                 TianshuRoutingScreen::new,
                 "/screens/priority.json");
+    }
+
+    public static void registerConfigScreen(FMLClientSetupEvent event) {
+        if (ModList.get().isLoaded("cloth_config")) {
+            AeAllPatternConfigScreen.register();
+        }
     }
 
     private static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {

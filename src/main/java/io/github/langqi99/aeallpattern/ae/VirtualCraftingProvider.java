@@ -1,13 +1,13 @@
 package io.github.langqi99.aeallpattern.ae;
 
 import appeng.api.crafting.IPatternDetails;
-import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.networking.crafting.ICraftingProvider;
 import appeng.api.stacks.AEItemKey;
-import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
-import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.binding.BindingPatternKey;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternOptions;
+import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
 import io.github.langqi99.aeallpattern.binding.BindingRecord;
 import io.github.langqi99.aeallpattern.binding.BindingSavedData;
 import io.github.langqi99.aeallpattern.linker.IncomingBuffer;
@@ -24,7 +24,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.binding.BlockEntityFingerprint;
 import io.github.langqi99.aeallpattern.diagnostics.PerformanceMetrics;
 
@@ -110,6 +109,7 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
         }
         Map<VirtualPatternDetails, PatternRoute> rebuilt = new LinkedHashMap<>();
         var anchor = linker.getGlobalPos();
+        AggregatePatternOptions options = linker.getPatternOptions();
         List<BindingRecord> bindings = BindingSavedData.get(linkerLevel.getServer()).all().stream()
                 .filter(binding -> binding.anchor().equals(anchor))
                 .sorted(java.util.Comparator.comparing(BindingRecord::bindingId))
@@ -141,18 +141,17 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
                     continue;
                 }
                 BindingPatternKey patternKey = new BindingPatternKey(binding.bindingId(), recipe.fingerprint());
-                ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
-                        List.of(GenericStack.fromItemStack(recipe.input())),
-                        List.of(GenericStack.fromItemStack(recipe.output())));
-                encoded.set(ModDataComponents.VIRTUAL_PATTERN_ID.get(),
-                        binding.bindingId() + ":" + recipe.fingerprint().stableKey());
-                IPatternDetails decoded = PatternDetailsHelper.decodePattern(encoded, linkerLevel);
-                if (decoded == null) {
-                    AeAllPattern.LOGGER.warn("AE2 rejected generated processing pattern for {}", recipe.recipeId());
+                AggregateRecipe aggregateRecipe = AggregateRecipe.from(recipe);
+                IPatternDetails processed = AggregatePatternExpander.expandRecipe(
+                        aggregateRecipe,
+                        options,
+                        linkerLevel,
+                        "linker:" + binding.bindingId() + ":" + recipe.fingerprint().stableKey());
+                if (processed == null) {
                     continue;
                 }
                 VirtualPatternDetails details = new VirtualPatternDetails(
-                        patternKey, decoded);
+                        patternKey, processed);
                 rebuilt.put(details, new PatternRoute(binding, recipe));
             }
         }

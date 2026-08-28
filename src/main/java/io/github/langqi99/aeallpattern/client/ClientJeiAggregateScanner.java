@@ -49,7 +49,7 @@ import tamaized.ae2jeiintegration.api.integrations.jei.IngredientConverters;
 /** Converts any JEI catalyst's visible recipes into concrete AE generic-stack patterns. */
 public final class ClientJeiAggregateScanner {
     private static final int MAX_RECIPES = AggregatePatternData.MAX_RECIPES;
-    private static final int MAX_EXPLICIT_ALTERNATIVES_PER_SLOT = 48;
+    private static final int MAX_EXPLICIT_ALTERNATIVES_PER_SLOT = AggregateInputSlot.MAX_ALTERNATIVES;
     private static long lastScanTick = Long.MIN_VALUE;
     private static BlockPos lastScanPos = BlockPos.ZERO;
 
@@ -76,7 +76,7 @@ public final class ClientJeiAggregateScanner {
             show("message.aeallpattern.generator.jei_not_ready");
             return;
         }
-        scan(runtime.orElseThrow(), event.getPos());
+        scan(runtime.orElseThrow(), ClientRecipeMachineResolver.resolvePosition(level, event.getPos()));
     }
 
     private static void scan(IJeiRuntime runtime, BlockPos pos) {
@@ -84,7 +84,7 @@ public final class ClientJeiAggregateScanner {
         if (minecraft.level == null || minecraft.player == null) {
             return;
         }
-        ItemStack catalyst = minecraft.level.getBlockState(pos).getBlock().asItem().getDefaultInstance();
+        ItemStack catalyst = ClientRecipeMachineResolver.recipeViewerCatalyst(minecraft.level, pos);
         if (catalyst.isEmpty()) {
             show("message.aeallpattern.generator.no_jei_recipes");
             return;
@@ -165,8 +165,12 @@ public final class ClientJeiAggregateScanner {
             var slots = layout.getRecipeSlotsView();
             List<AggregateInputSlot> inputSlots = new ArrayList<>();
             boolean valid = true;
-            for (IRecipeSlotView slot : slots.getSlotViews(RecipeIngredientRole.INPUT)) {
-                Optional<AggregateInputSlot> input = chooseInputSlot(slot);
+            List<IRecipeSlotView> inputViews = slots.getSlotViews(RecipeIngredientRole.INPUT);
+            int alternativesPerSlot = Math.min(
+                    MAX_EXPLICIT_ALTERNATIVES_PER_SLOT,
+                    AggregateRecipe.MAX_TOTAL_INPUT_ALTERNATIVES / Math.max(1, inputViews.size()));
+            for (IRecipeSlotView slot : inputViews) {
+                Optional<AggregateInputSlot> input = chooseInputSlot(slot, alternativesPerSlot);
                 if (input.isPresent()) {
                     inputSlots.add(input.orElseThrow());
                 } else if (!slot.isEmpty()) {
@@ -177,10 +181,11 @@ public final class ClientJeiAggregateScanner {
             List<ScannedOutput> scannedOutputs = slots.getSlotViews(RecipeIngredientRole.OUTPUT).stream()
                     .map(ClientJeiAggregateScanner::scanOutput)
                     .flatMap(Optional::stream)
-                    .limit(3)
+                    .limit(AggregateRecipe.MAX_OUTPUTS)
                     .toList();
             List<GenericStack> outputs = scannedOutputs.stream().map(ScannedOutput::stack).toList();
-            if (!valid || inputSlots.isEmpty() || outputs.isEmpty() || inputSlots.size() > 9) {
+            if (!valid || inputSlots.isEmpty() || outputs.isEmpty()
+                    || inputSlots.size() > AggregateRecipe.MAX_INPUTS) {
                 index++;
                 continue;
             }
@@ -293,7 +298,7 @@ public final class ClientJeiAggregateScanner {
                 || normalized.contains("확률");
     }
 
-    private static Optional<AggregateInputSlot> chooseInputSlot(IRecipeSlotView slot) {
+    private static Optional<AggregateInputSlot> chooseInputSlot(IRecipeSlotView slot, int alternativeLimit) {
         LinkedHashMap<String, GenericStack> unique = new LinkedHashMap<>();
         slot.getAllIngredients()
                 .map(ClientJeiAggregateScanner::toGenericStack)
@@ -314,7 +319,7 @@ public final class ClientJeiAggregateScanner {
                     List.of(candidates.getFirst()), itemTag));
         }
         return Optional.of(new AggregateInputSlot(
-                candidates.stream().limit(MAX_EXPLICIT_ALTERNATIVES_PER_SLOT).toList(),
+                candidates.stream().limit(alternativeLimit).toList(),
                 Optional.empty()));
     }
 

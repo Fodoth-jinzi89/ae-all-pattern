@@ -32,7 +32,10 @@ public final class AggregatePatternItem extends Item {
                     new SimpleMenuProvider(
                             (id, inventory, ignored) -> new AggregatePatternConfigMenu(id, inventory, hand),
                             Component.translatable("gui.aeallpattern.aggregate_config.title")),
-                    data -> data.writeEnum(hand));
+                    data -> {
+                        data.writeBoolean(false);
+                        data.writeEnum(hand);
+                    });
         }
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }

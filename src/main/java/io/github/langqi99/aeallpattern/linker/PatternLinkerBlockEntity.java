@@ -7,6 +7,8 @@ import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEItemKey;
 import appeng.blockentity.grid.AENetworkedBlockEntity;
 import io.github.langqi99.aeallpattern.ae.VirtualCraftingProvider;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternConfigMenu;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternOptions;
 import io.github.langqi99.aeallpattern.recipe.RecipeIndexService;
 import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
 import io.github.langqi99.aeallpattern.registry.ModItems;
@@ -16,7 +18,11 @@ import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.server.level.ServerLevel;
@@ -26,14 +32,16 @@ import java.util.List;
 import net.minecraft.world.level.block.Block;
 
 /** AE-owned anchor for bindings. It consumes one channel and a small idle power budget. */
-public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity {
+public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity implements MenuProvider {
     private static final String OWNER_TAG = "Owner";
+    private static final String OPTIONS_TAG = "PatternOptions";
     private static final double IDLE_POWER_USAGE = 2.0;
 
     @Nullable
     private UUID ownerId;
     private final IncomingBuffer incomingBuffer = new IncomingBuffer();
     private final VirtualCraftingProvider craftingProvider;
+    private AggregatePatternOptions patternOptions = AggregatePatternOptions.DEFAULT;
 
     public PatternLinkerBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.PATTERN_LINKER.get(), pos, state);
@@ -64,6 +72,29 @@ public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity {
 
     public void refreshPatterns() {
         craftingProvider.refresh();
+    }
+
+    public AggregatePatternOptions getPatternOptions() {
+        return patternOptions;
+    }
+
+    public void setPatternOptions(AggregatePatternOptions options) {
+        if (patternOptions.equals(options)) {
+            return;
+        }
+        patternOptions = options;
+        saveChanges();
+        refreshPatterns();
+    }
+
+    @Override
+    public Component getDisplayName() {
+        return Component.translatable("gui.aeallpattern.linker_config.title");
+    }
+
+    @Override
+    public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) {
+        return new AggregatePatternConfigMenu(id, inventory, worldPosition);
     }
 
     public int insertIntoNetwork(ItemStack stack, Actionable mode) {
@@ -97,6 +128,9 @@ public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity {
     public void loadTag(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadTag(tag, registries);
         ownerId = tag.hasUUID(OWNER_TAG) ? tag.getUUID(OWNER_TAG) : null;
+        patternOptions = tag.contains(OPTIONS_TAG)
+                ? AggregatePatternOptions.fromFlags(tag.getInt(OPTIONS_TAG))
+                : AggregatePatternOptions.DEFAULT;
         incomingBuffer.load(tag, registries);
     }
 
@@ -106,6 +140,7 @@ public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity {
         if (ownerId != null) {
             tag.putUUID(OWNER_TAG, ownerId);
         }
+        tag.putInt(OPTIONS_TAG, patternOptions.flags());
         incomingBuffer.save(tag, registries);
     }
 
