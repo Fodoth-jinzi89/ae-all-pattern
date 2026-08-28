@@ -4,6 +4,7 @@ import appeng.api.networking.GridFlags;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.networking.IGridNode;
+import appeng.api.networking.IManagedGridNode;
 import appeng.api.networking.crafting.CalculationStrategy;
 import appeng.api.networking.crafting.ICraftingPlan;
 import appeng.api.networking.crafting.ICraftingProvider;
@@ -985,7 +986,7 @@ public final class CoreGameTests {
     @GameTest(template = "empty", timeoutTicks = 80)
     public static void packagedCrafterAdapterLoadsConditionally(GameTestHelper helper) {
         var crafter = BuiltInRegistries.BLOCK.getOptional(
-                ResourceLocation.fromNamespaceAndPath("packagedexcrafting", "elite_crafter"));
+                ResourceLocation.fromNamespaceAndPath("packagedexcrafting", "ender_crafter"));
         if (crafter.isEmpty()) {
             helper.succeed();
             return;
@@ -1004,6 +1005,85 @@ public final class CoreGameTests {
         helper.assertTrue(adapter.orElseThrow().insertRecipe(
                         helper.getLevel(), binding, recipe, recipe.inputs()),
                 "PackagedExCrafting machine rejected its discovered recipe");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 80)
+    public static void mePackagingProviderAcceptsAggregatePatternsConditionally(GameTestHelper helper) {
+        var crafter = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("packagedexcrafting", "elite_crafter"));
+        var providerBlock = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("packagedauto", "packaging_provider"));
+        if (crafter.isEmpty() || providerBlock.isEmpty()) {
+            helper.succeed();
+            return;
+        }
+        BlockPos crafterPos = new BlockPos(0, 1, 0);
+        helper.setBlock(crafterPos, crafter.get());
+        BlockEntity machine = helper.getBlockEntity(crafterPos);
+        var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine).orElseThrow();
+        RecipeSnapshot recipe = RecipeIndexService.catalog(helper.getLevel(), machine, adapter).recipes().getFirst();
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath(
+                        "applied_extended_crafting", "ender_crafter_pattern_provider"),
+                "block.applied_extended_crafting.ender_crafter_pattern_provider",
+                List.of(AggregateRecipe.from(recipe)));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        BlockPos providerPos = new BlockPos(2, 1, 0);
+        BlockPos energyPos = new BlockPos(2, 1, 1);
+        helper.setBlock(providerPos, providerBlock.get());
+        helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
+        helper.runAfterDelay(10, () -> {
+            BlockEntity provider = helper.getBlockEntity(providerPos);
+            try {
+                Object handler = provider.getClass().getMethod("getItemHandler").invoke(provider);
+                boolean valid = (boolean) handler.getClass()
+                        .getMethod("isItemValid", int.class, ItemStack.class).invoke(handler, 0, aggregate);
+                helper.assertTrue(valid, "ME packaging provider rejected an aggregate pattern");
+                handler.getClass().getMethod("setStackInSlot", int.class, ItemStack.class)
+                        .invoke(handler, 0, aggregate);
+                List<?> recipeList = (List<?>) provider.getClass().getField("recipeList").get(provider);
+                helper.assertValueEqual(recipeList.size(), 1,
+                        "ME packaging provider did not expand the aggregate package recipe");
+                IManagedGridNode node = (IManagedGridNode) provider.getClass().getMethod("getMainNode").invoke(provider);
+                helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(recipe.output())),
+                        "AE network did not receive the aggregate direct crafting recipe");
+
+                AggregatePatternRef genericRef = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                        helper.getLevel().getServer(),
+                        ResourceLocation.fromNamespaceAndPath("minecraft", "furnace"),
+                        "block.minecraft.furnace",
+                        List.of(AggregateRecipe.from(recipe)));
+                ItemStack genericAggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+                genericAggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), genericRef);
+                handler.getClass().getMethod("setStackInSlot", int.class, ItemStack.class)
+                        .invoke(handler, 0, genericAggregate);
+                helper.assertValueEqual(recipeList.size(), 1,
+                        "ME packaging provider did not create a generic processing package recipe");
+                helper.assertValueEqual(recipeList.getFirst().getClass().getName(),
+                        "thelm.packagedauto.recipe.ProcessingPackageRecipeInfo",
+                        "ME packaging provider used the wrong generic package recipe type");
+                helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(recipe.output())),
+                        "AE network did not receive the generic aggregate direct crafting recipe");
+            } catch (ReflectiveOperationException error) {
+                throw new IllegalStateException("Unable to inspect the optional ME packaging provider", error);
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = "empty")
+    public static void legacyAggregateInputAlternativesAreMigrated(GameTestHelper helper) {
+        List<GenericStack> alternatives = new ArrayList<>();
+        for (int index = 0; index <= AggregateInputSlot.MAX_ALTERNATIVES; index++) {
+            alternatives.add(GenericStack.fromItemStack(new ItemStack(Items.STONE)));
+        }
+        AggregateInputSlot migrated = AggregateInputSlot.fromSavedData(alternatives, Optional.empty());
+        helper.assertValueEqual(migrated.alternatives().size(), AggregateInputSlot.MAX_ALTERNATIVES,
+                "legacy aggregate alternatives were not truncated to the current limit");
         helper.succeed();
     }
 

@@ -1,11 +1,20 @@
 package io.github.langqi99.aeallpattern.machine;
 
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.GenericStack;
+import appeng.api.crafting.IPatternDetails;
 import io.github.langqi99.aeallpattern.AeAllPattern;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternKind;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternLibrary;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternOptions;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternRef;
+import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
 import io.github.langqi99.aeallpattern.binding.BindingRecord;
 import io.github.langqi99.aeallpattern.recipe.RecipeCatalog;
 import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
 import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
+import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -30,6 +39,14 @@ final class PackagedCraftingAdapter implements MachineAdapter {
     private static final ResourceLocation ID = id("aeallpattern", "packaged_crafting");
     private static final int MAX_PATTERNS = 4096;
     private static final Map<ResourceLocation, Spec> MACHINES = machineSpecs();
+    private static final Map<ResourceLocation, ResourceLocation> AGGREGATE_CATALYST_ALIASES = Map.ofEntries(
+            alias("applied_extended_crafting", "table_basic_pattern_provider", "packagedexcrafting", "basic_crafter"),
+            alias("applied_extended_crafting", "table_advanced_pattern_provider", "packagedexcrafting", "advanced_crafter"),
+            alias("applied_extended_crafting", "table_elite_pattern_provider", "packagedexcrafting", "elite_crafter"),
+            alias("applied_extended_crafting", "table_ultimate_pattern_provider", "packagedexcrafting", "ultimate_crafter"),
+            alias("applied_extended_crafting", "ender_crafter_pattern_provider", "packagedexcrafting", "ender_crafter"),
+            alias("applied_extended_crafting", "flux_crafter_pattern_provider", "packagedexcrafting", "flux_crafter"),
+            alias("applied_extended_crafting", "crafter_core_pattern_provider", "packagedexcrafting", "combination_crafter"));
 
     @Override
     public ResourceLocation id() {
@@ -153,6 +170,110 @@ final class PackagedCraftingAdapter implements MachineAdapter {
         }
         return ItemHandlerTransfer.extractAny(level.getCapability(
                 Capabilities.ItemHandler.BLOCK, binding.target().pos(), null), simulate);
+    }
+
+    static List<Object> packageRecipeInfos(ServerLevel level, ItemStack aggregate) {
+        AggregatePatternRef ref = aggregate.get(ModDataComponents.AGGREGATE_PATTERN.get());
+        if (ref == null) {
+            return List.of();
+        }
+        ResourceLocation machineId = AGGREGATE_CATALYST_ALIASES.getOrDefault(ref.catalystId(), ref.catalystId());
+        Spec spec = MACHINES.get(machineId);
+        List<AggregateRecipe> recipes = AggregatePatternLibrary.get(level.getServer())
+                .recipes(level.getServer(), ref.libraryId()).orElse(List.of());
+        AggregatePatternOptions savedOptions = aggregate.get(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get());
+        AggregatePatternOptions options = savedOptions == null ? AggregatePatternOptions.DEFAULT : savedOptions;
+        List<Object> result = new ArrayList<>(recipes.size());
+        for (AggregateRecipe aggregateRecipe : recipes) {
+            Object info = spec == null ? null : specializedRecipeInfo(level, spec, aggregateRecipe);
+            if (info == null) {
+                info = processingRecipeInfo(level, options, aggregateRecipe);
+            }
+            try {
+                if (info != null && invokeBoolean(info, "isValid")) {
+                    result.add(info);
+                }
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                AeAllPattern.LOGGER.debug(
+                        "Skipping aggregate package recipe {}", aggregateRecipe.recipeId(), error);
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static Object specializedRecipeInfo(
+            ServerLevel level, Spec spec, AggregateRecipe aggregateRecipe) {
+        try {
+            RecipeHolder<?> holder = level.getRecipeManager().byKey(aggregateRecipe.recipeId()).orElse(null);
+            if (holder == null || (spec.tier > 0 && invokeInt(holder.value(), "getTier") != spec.tier)) {
+                return null;
+            }
+            RecipeLayout layout = layout(spec, holder.value());
+            Object info = createRecipeInfo(spec, holder.id(), layout, layout.primaryInputs());
+            return invokeBoolean(info, "isValid") && matchesOutput(info, aggregateRecipe) ? info : null;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            AeAllPattern.LOGGER.debug(
+                    "Unable to rebuild specialized package recipe {}", aggregateRecipe.recipeId(), error);
+            return null;
+        }
+    }
+
+    private static Object processingRecipeInfo(
+            ServerLevel level, AggregatePatternOptions options, AggregateRecipe recipe) {
+        if (recipe.kind() != AggregatePatternKind.PROCESSING) {
+            return null;
+        }
+        try {
+            IPatternDetails details = AggregatePatternExpander.expandRecipe(
+                    recipe, options, level, "aggregate-package:" + recipe.patternId());
+            if (details == null) {
+                return null;
+            }
+            List<ItemStack> inputs = new ArrayList<>(details.getInputs().length);
+            for (IPatternDetails.IInput input : details.getInputs()) {
+                GenericStack[] possible = input.getPossibleInputs();
+                if (possible.length == 0) {
+                    return null;
+                }
+                ItemStack stack = itemStack(possible[0], input.getMultiplier());
+                if (stack.isEmpty()) {
+                    return null;
+                }
+                inputs.add(stack);
+            }
+            List<ItemStack> outputs = new ArrayList<>(details.getOutputs().size());
+            for (GenericStack output : details.getOutputs()) {
+                ItemStack stack = itemStack(output, 1);
+                if (stack.isEmpty()) {
+                    return null;
+                }
+                outputs.add(stack);
+            }
+            return Class.forName("thelm.packagedauto.recipe.ProcessingPackageRecipeInfo")
+                    .getConstructor(List.class, List.class).newInstance(inputs, outputs);
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            AeAllPattern.LOGGER.debug(
+                    "Unable to rebuild processing package recipe {}", recipe.recipeId(), error);
+            return null;
+        }
+    }
+
+    private static ItemStack itemStack(GenericStack stack, long multiplier) {
+        if (!(stack.what() instanceof AEItemKey key)) {
+            return ItemStack.EMPTY;
+        }
+        long amount = Math.multiplyExact(stack.amount(), multiplier);
+        return amount > 0 && amount <= Integer.MAX_VALUE ? key.toStack((int) amount) : ItemStack.EMPTY;
+    }
+
+    private static boolean matchesOutput(Object info, AggregateRecipe recipe) throws ReflectiveOperationException {
+        if (!(recipe.outputs().getFirst().what() instanceof AEItemKey key)
+                || recipe.outputs().getFirst().amount() > Integer.MAX_VALUE) {
+            return false;
+        }
+        ItemStack actual = firstOutput(info);
+        ItemStack expected = key.toStack((int) recipe.outputs().getFirst().amount());
+        return ItemStack.isSameItemSameComponents(actual, expected) && actual.getCount() == expected.getCount();
     }
 
     private static RecipeLayout layout(Spec spec, Recipe<?> recipe) throws ReflectiveOperationException {
@@ -308,6 +429,11 @@ final class PackagedCraftingAdapter implements MachineAdapter {
 
     private static ResourceLocation id(String namespace, String path) {
         return ResourceLocation.fromNamespaceAndPath(namespace, path);
+    }
+
+    private static Map.Entry<ResourceLocation, ResourceLocation> alias(
+            String sourceNamespace, String sourcePath, String targetNamespace, String targetPath) {
+        return Map.entry(id(sourceNamespace, sourcePath), id(targetNamespace, targetPath));
     }
 
     private enum Kind {

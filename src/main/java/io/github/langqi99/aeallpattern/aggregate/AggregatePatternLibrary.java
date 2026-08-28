@@ -286,7 +286,7 @@ public final class AggregatePatternLibrary extends SavedData {
                 Optional<ResourceLocation> itemTag = slotTag.contains("ItemTag", Tag.TAG_STRING)
                         ? Optional.of(ResourceLocation.parse(slotTag.getString("ItemTag")))
                         : Optional.empty();
-                slots.add(new AggregateInputSlot(alternatives, itemTag));
+                slots.add(AggregateInputSlot.fromSavedData(alternatives, itemTag));
             }
             return List.copyOf(slots);
         }
