@@ -27,6 +27,41 @@ class ClientRecipeMachineResolverTest {
     }
 
     @Test
+    void mapsEveryAppliedExtendedCraftingStationToItsExtendedCraftingWorkstation() {
+        assertAlias("applied_extended_crafting", "table_basic_pattern_provider", "extendedcrafting", "basic_table");
+        assertAlias("applied_extended_crafting", "table_advanced_pattern_provider", "extendedcrafting", "advanced_table");
+        assertAlias("applied_extended_crafting", "table_elite_pattern_provider", "extendedcrafting", "elite_table");
+        assertAlias("applied_extended_crafting", "table_ultimate_pattern_provider", "extendedcrafting", "ultimate_table");
+        assertAlias("applied_extended_crafting", "ender_crafter_pattern_provider", "extendedcrafting", "ender_crafter");
+        assertAlias("applied_extended_crafting", "flux_crafter_pattern_provider", "extendedcrafting", "flux_crafter");
+        assertAlias("applied_extended_crafting", "crafter_core_pattern_provider", "extendedcrafting", "crafting_core");
+    }
+
+    @Test
+    void mapsEveryMekanismExtrasFactoryToARegisteredWorkstation() {
+        String[] tiers = {"absolute", "supreme", "cosmic", "infinite"};
+        String[] mekanismFactories = {
+                "combining", "compressing", "crushing", "enriching", "infusing",
+                "injecting", "purifying", "sawing", "smelting"
+        };
+        String[] moreMachineFactories = {
+                "centrifuging", "crystallizing", "dissolving", "lathing", "liquifying",
+                "oxidizing", "painting", "pigment_extracting", "planting", "pressurised_reacting",
+                "recycling", "replicating", "rolling_mill", "stamping", "washing"
+        };
+        for (String tier : tiers) {
+            for (String factory : mekanismFactories) {
+                assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
+                        "mekanism", "basic_" + factory + "_factory");
+            }
+            for (String factory : moreMachineFactories) {
+                assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
+                        "mekmm", "basic_" + factory + "_factory");
+            }
+        }
+    }
+
+    @Test
     void leavesOrdinaryMachinesUnchanged() {
         ResourceLocation id = id("mekmm", "large_chemical_infuser");
         assertEquals(id, ClientRecipeMachineResolver.catalystAlias(id));

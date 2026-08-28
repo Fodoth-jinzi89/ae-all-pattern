@@ -12,6 +12,8 @@
     "CraftingServiceSecondaryOutputMixin",
     "PatternProviderLogicMixin",
     "compat.useless.AdvancedAlloyFurnaceAeManagerMixin",
+    "PackagedAutoPackagingProviderBlockEntityMixin",
+    "PackagedAutoPackagingProviderItemHandlerMixin",
     "ECOCraftingPatternBusBlockEntityMixin",
     "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"

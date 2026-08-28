@@ -45,6 +45,14 @@ public record AggregateInputSlot(
         return new AggregateInputSlot(List.of(stack), Optional.empty());
     }
 
+    public static AggregateInputSlot fromSavedData(
+            List<GenericStack> alternatives, Optional<ResourceLocation> itemTag) {
+        if (alternatives.size() > MAX_ALTERNATIVES) {
+            alternatives = alternatives.subList(0, MAX_ALTERNATIVES);
+        }
+        return new AggregateInputSlot(alternatives, itemTag);
+    }
+
     public GenericStack primary() {
         return alternatives.getFirst();
     }
