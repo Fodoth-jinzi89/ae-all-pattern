@@ -1011,7 +1011,7 @@ public final class CoreGameTests {
     @GameTest(template = "empty", timeoutTicks = 80)
     public static void mePackagingProviderAcceptsAggregatePatternsConditionally(GameTestHelper helper) {
         var crafter = BuiltInRegistries.BLOCK.getOptional(
-                ResourceLocation.fromNamespaceAndPath("packagedexcrafting", "elite_crafter"));
+                ResourceLocation.fromNamespaceAndPath("packagedexcrafting", "ender_crafter"));
         var providerBlock = BuiltInRegistries.BLOCK.getOptional(
                 ResourceLocation.fromNamespaceAndPath("packagedauto", "packaging_provider"));
         if (crafter.isEmpty() || providerBlock.isEmpty()) {
@@ -1025,9 +1025,8 @@ public final class CoreGameTests {
         RecipeSnapshot recipe = RecipeIndexService.catalog(helper.getLevel(), machine, adapter).recipes().getFirst();
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
-                ResourceLocation.fromNamespaceAndPath(
-                        "applied_extended_crafting", "ender_crafter_pattern_provider"),
-                "block.applied_extended_crafting.ender_crafter_pattern_provider",
+                ResourceLocation.fromNamespaceAndPath("extendedcrafting", "ender_crafter"),
+                "block.extendedcrafting.ender_crafter",
                 List.of(AggregateRecipe.from(recipe)));
         ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
         aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
@@ -1049,7 +1048,14 @@ public final class CoreGameTests {
                 helper.assertValueEqual(recipeList.size(), 1,
                         "ME packaging provider did not expand the aggregate package recipe");
                 IManagedGridNode node = (IManagedGridNode) provider.getClass().getMethod("getMainNode").invoke(provider);
-                assertAggregatePackageWorkflow(helper, provider, node, recipe.output());
+                IPatternDetails unpackaging = assertAggregatePackageWorkflow(
+                        helper, provider, node, recipe.output());
+                boolean accepted = (boolean) provider.getClass()
+                        .getMethod("pushPattern", IPatternDetails.class, KeyCounter[].class)
+                        .invoke(provider, unpackaging, new KeyCounter[0]);
+                helper.assertTrue(accepted, "ME packaging provider did not send the unpackaged recipe to its target");
+                helper.assertTrue((boolean) machine.getClass().getMethod("isBusy").invoke(machine),
+                        "target packaged crafter did not accept the unpackaged recipe");
 
                 AggregatePatternRef genericRef = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                         helper.getLevel().getServer(),
@@ -1073,7 +1079,7 @@ public final class CoreGameTests {
         });
     }
 
-    private static void assertAggregatePackageWorkflow(
+    private static IPatternDetails assertAggregatePackageWorkflow(
             GameTestHelper helper, BlockEntity provider, IManagedGridNode node, ItemStack output)
             throws ReflectiveOperationException {
         List<?> available = (List<?>) provider.getClass().getMethod("getAvailablePatterns").invoke(provider);
@@ -1104,6 +1110,7 @@ public final class CoreGameTests {
         }
         helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(output)),
                 "AE network did not receive the aggregate package workflow's final output");
+        return unpackaging.getFirst();
     }
 
     @GameTest(template = "empty")

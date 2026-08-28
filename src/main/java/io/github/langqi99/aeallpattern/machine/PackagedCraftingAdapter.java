@@ -40,13 +40,24 @@ final class PackagedCraftingAdapter implements MachineAdapter {
     private static final int MAX_PATTERNS = 4096;
     private static final Map<ResourceLocation, Spec> MACHINES = machineSpecs();
     private static final Map<ResourceLocation, ResourceLocation> AGGREGATE_CATALYST_ALIASES = Map.ofEntries(
+            alias("extendedcrafting", "basic_table", "packagedexcrafting", "basic_crafter"),
+            alias("extendedcrafting", "advanced_table", "packagedexcrafting", "advanced_crafter"),
+            alias("extendedcrafting", "elite_table", "packagedexcrafting", "elite_crafter"),
+            alias("extendedcrafting", "ultimate_table", "packagedexcrafting", "ultimate_crafter"),
+            alias("extendedcrafting", "ender_crafter", "packagedexcrafting", "ender_crafter"),
+            alias("extendedcrafting", "flux_crafter", "packagedexcrafting", "flux_crafter"),
+            alias("extendedcrafting", "crafting_core", "packagedexcrafting", "combination_crafter"),
             alias("applied_extended_crafting", "table_basic_pattern_provider", "packagedexcrafting", "basic_crafter"),
             alias("applied_extended_crafting", "table_advanced_pattern_provider", "packagedexcrafting", "advanced_crafter"),
             alias("applied_extended_crafting", "table_elite_pattern_provider", "packagedexcrafting", "elite_crafter"),
             alias("applied_extended_crafting", "table_ultimate_pattern_provider", "packagedexcrafting", "ultimate_crafter"),
             alias("applied_extended_crafting", "ender_crafter_pattern_provider", "packagedexcrafting", "ender_crafter"),
             alias("applied_extended_crafting", "flux_crafter_pattern_provider", "packagedexcrafting", "flux_crafter"),
-            alias("applied_extended_crafting", "crafter_core_pattern_provider", "packagedexcrafting", "combination_crafter"));
+            alias("applied_extended_crafting", "crafter_core_pattern_provider", "packagedexcrafting", "combination_crafter"),
+            alias("avaritia", "sculk_crafting_table", "packagedavaritia", "sculk_crafter"),
+            alias("avaritia", "nether_crafting_table", "packagedavaritia", "nether_crafter"),
+            alias("avaritia", "end_crafting_table", "packagedavaritia", "end_crafter"),
+            alias("avaritia", "extreme_crafting_table", "packagedavaritia", "extreme_crafter"));
 
     @Override
     public ResourceLocation id() {
@@ -185,10 +196,9 @@ final class PackagedCraftingAdapter implements MachineAdapter {
         AggregatePatternOptions options = savedOptions == null ? AggregatePatternOptions.DEFAULT : savedOptions;
         List<Object> result = new ArrayList<>(recipes.size());
         for (AggregateRecipe aggregateRecipe : recipes) {
-            Object info = spec == null ? null : specializedRecipeInfo(level, spec, aggregateRecipe);
-            if (info == null) {
-                info = processingRecipeInfo(level, options, aggregateRecipe);
-            }
+            Object info = spec == null
+                    ? processingRecipeInfo(level, options, aggregateRecipe)
+                    : specializedRecipeInfo(level, spec, aggregateRecipe);
             try {
                 if (info != null && invokeBoolean(info, "isValid")) {
                     result.add(info);
