@@ -15,6 +15,10 @@ public final class AeAllPatternMixinPlugin implements IMixinConfigPlugin {
         if (mixin.endsWith("ECOCraftingPatternBusBlockEntityMixin")) {
             return loaded("neoecoae");
         }
+        if (mixin.endsWith("PackagedAutoPackagingProviderItemHandlerMixin")
+                || mixin.endsWith("PackagedAutoPackagingProviderBlockEntityMixin")) {
+            return loaded("packagedauto");
+        }
         return true;
     }
     private static boolean loaded(String modId) {
