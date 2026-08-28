@@ -10,6 +10,32 @@ import net.minecraft.world.level.Level;
 
 /** Resolves recipe-viewer workstations that differ from the clicked block. */
 public final class ClientRecipeMachineResolver {
+    private static final String[] MEKANISM_EXTRAS_TIERS = {"absolute_", "supreme_", "cosmic_", "infinite_"};
+    private static final Map<String, ResourceLocation> MEKANISM_EXTRAS_FACTORY_ALIASES = Map.ofEntries(
+            factoryAlias("combining_factory", "mekanism", "basic_combining_factory"),
+            factoryAlias("compressing_factory", "mekanism", "basic_compressing_factory"),
+            factoryAlias("crushing_factory", "mekanism", "basic_crushing_factory"),
+            factoryAlias("enriching_factory", "mekanism", "basic_enriching_factory"),
+            factoryAlias("infusing_factory", "mekanism", "basic_infusing_factory"),
+            factoryAlias("injecting_factory", "mekanism", "basic_injecting_factory"),
+            factoryAlias("purifying_factory", "mekanism", "basic_purifying_factory"),
+            factoryAlias("sawing_factory", "mekanism", "basic_sawing_factory"),
+            factoryAlias("smelting_factory", "mekanism", "basic_smelting_factory"),
+            factoryAlias("centrifuging_factory", "mekmm", "basic_centrifuging_factory"),
+            factoryAlias("crystallizing_factory", "mekmm", "basic_crystallizing_factory"),
+            factoryAlias("dissolving_factory", "mekmm", "basic_dissolving_factory"),
+            factoryAlias("lathing_factory", "mekmm", "basic_lathing_factory"),
+            factoryAlias("liquifying_factory", "mekmm", "basic_liquifying_factory"),
+            factoryAlias("oxidizing_factory", "mekmm", "basic_oxidizing_factory"),
+            factoryAlias("painting_factory", "mekmm", "basic_painting_factory"),
+            factoryAlias("pigment_extracting_factory", "mekmm", "basic_pigment_extracting_factory"),
+            factoryAlias("planting_factory", "mekmm", "basic_planting_factory"),
+            factoryAlias("pressurised_reacting_factory", "mekmm", "basic_pressurised_reacting_factory"),
+            factoryAlias("recycling_factory", "mekmm", "basic_recycling_factory"),
+            factoryAlias("replicating_factory", "mekmm", "basic_replicating_factory"),
+            factoryAlias("rolling_mill_factory", "mekmm", "basic_rolling_mill_factory"),
+            factoryAlias("stamping_factory", "mekmm", "basic_stamping_factory"),
+            factoryAlias("washing_factory", "mekmm", "basic_washing_factory"));
     private static final Map<ResourceLocation, ResourceLocation> CATALYST_ALIASES = Map.ofEntries(
             alias("packagedexcrafting", "basic_crafter", "extendedcrafting", "basic_table"),
             alias("packagedexcrafting", "advanced_crafter", "extendedcrafting", "advanced_table"),
@@ -47,7 +73,17 @@ public final class ClientRecipeMachineResolver {
     }
 
     static ResourceLocation catalystAlias(ResourceLocation blockId) {
-        return CATALYST_ALIASES.getOrDefault(blockId, blockId);
+        ResourceLocation alias = CATALYST_ALIASES.get(blockId);
+        if (alias != null || !blockId.getNamespace().equals("mekanism_extras")) {
+            return alias == null ? blockId : alias;
+        }
+        for (String tier : MEKANISM_EXTRAS_TIERS) {
+            if (blockId.getPath().startsWith(tier)) {
+                return MEKANISM_EXTRAS_FACTORY_ALIASES.getOrDefault(
+                        blockId.getPath().substring(tier.length()), blockId);
+            }
+        }
+        return blockId;
     }
 
     private static ResourceLocation id(String namespace, String path) {
@@ -57,5 +93,10 @@ public final class ClientRecipeMachineResolver {
     private static Map.Entry<ResourceLocation, ResourceLocation> alias(
             String sourceNamespace, String sourcePath, String targetNamespace, String targetPath) {
         return Map.entry(id(sourceNamespace, sourcePath), id(targetNamespace, targetPath));
+    }
+
+    private static Map.Entry<String, ResourceLocation> factoryAlias(
+            String sourcePath, String targetNamespace, String targetPath) {
+        return Map.entry(sourcePath, id(targetNamespace, targetPath));
     }
 }
