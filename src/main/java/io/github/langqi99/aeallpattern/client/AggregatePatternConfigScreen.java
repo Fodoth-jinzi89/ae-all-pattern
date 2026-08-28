@@ -4,8 +4,6 @@ import io.github.langqi99.aeallpattern.aggregate.AggregatePatternConfigMenu;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternRef;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -14,18 +12,13 @@ import net.minecraft.world.item.ItemStack;
 
 /** Compact AE-colored editor for one held aggregate pattern. */
 public final class AggregatePatternConfigScreen extends AbstractContainerScreen<AggregatePatternConfigMenu> {
-    private Button splitButton;
-    private Button ignoreOutputButton;
-    private Button skipProbabilisticMainButton;
-    private Button ignoreProbabilisticByproductsButton;
-
     public AggregatePatternConfigScreen(
             AggregatePatternConfigMenu menu,
             Inventory inventory,
             Component title) {
         super(menu, inventory, title);
         imageWidth = 196;
-        imageHeight = 180;
+        imageHeight = 128;
         titleLabelX = 34;
         titleLabelY = 10;
     }
@@ -33,41 +26,42 @@ public final class AggregatePatternConfigScreen extends AbstractContainerScreen<
     @Override
     protected void init() {
         super.init();
-        splitButton = addRenderableWidget(Button.builder(splitLabel(), ignored -> toggle(
-                        AggregatePatternConfigMenu.TOGGLE_SPLIT_SAME_ITEMS))
-                .bounds(leftPos + 12, topPos + 38, 172, 24)
-                .tooltip(Tooltip.create(Component.translatable(
-                        "gui.aeallpattern.aggregate_config.split_same_items.tooltip")))
-                .build());
-        ignoreOutputButton = addRenderableWidget(Button.builder(ignoreOutputLabel(), ignored -> toggle(
-                        AggregatePatternConfigMenu.TOGGLE_IGNORE_OUTPUT_COMPONENTS))
-                .bounds(leftPos + 12, topPos + 70, 172, 24)
-                .tooltip(Tooltip.create(Component.translatable(
-                        "gui.aeallpattern.aggregate_config.ignore_output_nbt.tooltip")))
-                .build());
-        skipProbabilisticMainButton = addRenderableWidget(Button.builder(
-                        skipProbabilisticMainLabel(), ignored -> toggle(
-                                AggregatePatternConfigMenu.TOGGLE_SKIP_PROBABILISTIC_MAIN_OUTPUT))
-                .bounds(leftPos + 12, topPos + 102, 172, 24)
-                .tooltip(Tooltip.create(Component.translatable(
-                        "gui.aeallpattern.aggregate_config.skip_probabilistic_main.tooltip")))
-                .build());
-        ignoreProbabilisticByproductsButton = addRenderableWidget(Button.builder(
-                        ignoreProbabilisticByproductsLabel(), ignored -> toggle(
-                                AggregatePatternConfigMenu.TOGGLE_IGNORE_PROBABILISTIC_BYPRODUCTS))
-                .bounds(leftPos + 12, topPos + 134, 172, 24)
-                .tooltip(Tooltip.create(Component.translatable(
-                        "gui.aeallpattern.aggregate_config.ignore_probabilistic_byproducts.tooltip")))
-                .build());
+        addOption(38,
+                "gui.aeallpattern.aggregate_config.split_same_items",
+                "gui.aeallpattern.aggregate_config.split_same_items.tooltip",
+                () -> menu.getOptions().splitSameItems(),
+                AggregatePatternConfigMenu.TOGGLE_SPLIT_SAME_ITEMS);
+        addOption(55,
+                "gui.aeallpattern.aggregate_config.ignore_output_nbt",
+                "gui.aeallpattern.aggregate_config.ignore_output_nbt.tooltip",
+                () -> menu.getOptions().ignoreOutputComponents(),
+                AggregatePatternConfigMenu.TOGGLE_IGNORE_OUTPUT_COMPONENTS);
+        addOption(72,
+                "gui.aeallpattern.aggregate_config.skip_probabilistic_main",
+                "gui.aeallpattern.aggregate_config.skip_probabilistic_main.tooltip",
+                () -> menu.getOptions().skipProbabilisticMainOutput(),
+                AggregatePatternConfigMenu.TOGGLE_SKIP_PROBABILISTIC_MAIN_OUTPUT);
+        addOption(89,
+                "gui.aeallpattern.aggregate_config.ignore_probabilistic_byproducts",
+                "gui.aeallpattern.aggregate_config.ignore_probabilistic_byproducts.tooltip",
+                () -> menu.getOptions().ignoreProbabilisticByproducts(),
+                AggregatePatternConfigMenu.TOGGLE_IGNORE_PROBABILISTIC_BYPRODUCTS);
     }
 
-    @Override
-    protected void containerTick() {
-        super.containerTick();
-        splitButton.setMessage(splitLabel());
-        ignoreOutputButton.setMessage(ignoreOutputLabel());
-        skipProbabilisticMainButton.setMessage(skipProbabilisticMainLabel());
-        ignoreProbabilisticByproductsButton.setMessage(ignoreProbabilisticByproductsLabel());
+    private void addOption(
+            int y,
+            String labelKey,
+            String tooltipKey,
+            java.util.function.BooleanSupplier enabled,
+            int toggleId) {
+        addRenderableWidget(new AggregateConfigOptionButton(
+                leftPos + 12,
+                topPos + y,
+                172,
+                Component.translatable(labelKey),
+                Component.translatable(tooltipKey),
+                enabled,
+                () -> toggle(toggleId)));
     }
 
     private void toggle(int id) {
@@ -76,39 +70,6 @@ public final class AggregatePatternConfigScreen extends AbstractContainerScreen<
         }
         menu.clickMenuButton(minecraft.player, id);
         minecraft.gameMode.handleInventoryButtonClick(menu.containerId, id);
-    }
-
-    private Component splitLabel() {
-        return optionLabel(
-                "gui.aeallpattern.aggregate_config.split_same_items",
-                menu.getOptions().splitSameItems());
-    }
-
-    private Component ignoreOutputLabel() {
-        return optionLabel(
-                "gui.aeallpattern.aggregate_config.ignore_output_nbt",
-                menu.getOptions().ignoreOutputComponents());
-    }
-
-    private Component skipProbabilisticMainLabel() {
-        return optionLabel(
-                "gui.aeallpattern.aggregate_config.skip_probabilistic_main",
-                menu.getOptions().skipProbabilisticMainOutput());
-    }
-
-    private Component ignoreProbabilisticByproductsLabel() {
-        return optionLabel(
-                "gui.aeallpattern.aggregate_config.ignore_probabilistic_byproducts",
-                menu.getOptions().ignoreProbabilisticByproducts());
-    }
-
-    private static Component optionLabel(String key, boolean enabled) {
-        return Component.translatable(
-                "gui.aeallpattern.aggregate_config.option",
-                Component.translatable(enabled
-                        ? "gui.aeallpattern.aggregate_config.enabled"
-                        : "gui.aeallpattern.aggregate_config.disabled"),
-                Component.translatable(key));
     }
 
     @Override
@@ -131,7 +92,7 @@ public final class AggregatePatternConfigScreen extends AbstractContainerScreen<
                 font,
                 Component.translatable("gui.aeallpattern.aggregate_config.hint"),
                 12,
-                164,
+                112,
                 0xFF67677A,
                 false);
     }

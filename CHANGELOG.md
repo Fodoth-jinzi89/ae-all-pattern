@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.6 - 2026-08-28
+
+- Added EMI + TooManyRecipeViewers support to the aggregate-pattern generator, including JEI compatibility recipes exposed through TMRV.
+- Preserved candidate ingredients, Mekanism chemicals, and probabilistic output metadata when scanning EMI recipes.
+- Added per-pattern safeguards for chance-based main outputs and byproducts.
+- Fixed Mekanism recipe retention and oversized custom-payload failures during client-side aggregate scans.
+- Standardized the Chinese “样板” terminology across the interface.
+- Reworked the aggregate-pattern right-click settings into compact AE-style option rows with inline states and hover help.
+- Added an explicit EMI/TMRV development runtime while keeping the release JAR and dedicated server independent of recipe-viewer mods.
+- Isolated automated GameTests from the playable test save so minimal dependency runs cannot remove optional-mod machines.
+
 ## 0.1.0 - 2026-08-25
 
 - Added the channel- and power-aware All Pattern Linker AE2 node.
