@@ -60,6 +60,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -289,9 +290,20 @@ public final class CoreGameTests {
             player.setItemInHand(InteractionHand.MAIN_HAND, binder);
 
             player.setShiftKeyDown(false);
+            BlockPos absoluteLinkerPos = helper.absolutePos(linkerPos);
+            ItemInteractionResult blockResult = helper.getLevel().getBlockState(absoluteLinkerPos).useItemOn(
+                    binder,
+                    helper.getLevel(),
+                    player,
+                    InteractionHand.MAIN_HAND,
+                    hitResult(helper, linkerPos));
+            helper.assertValueEqual(
+                    blockResult,
+                    ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION,
+                    "linker default interaction intercepted the pattern binder");
             ModItems.PATTERN_BINDER.get().useOn(context(helper, player, linkerPos));
             helper.assertTrue(binder.has(ModDataComponents.ANCHOR_SELECTION.get()),
-                    "selecting a linker did not store an anchor");
+                    "right-clicking a linker with the binder did not store an anchor");
 
             player.setShiftKeyDown(true);
             ModItems.PATTERN_BINDER.get().useOn(context(helper, player, firstTarget));
@@ -316,13 +328,17 @@ public final class CoreGameTests {
 
     private static UseOnContext context(
             GameTestHelper helper, net.minecraft.world.entity.player.Player player, BlockPos relativePos) {
-        BlockPos absolutePos = helper.absolutePos(relativePos);
         return new UseOnContext(
                 helper.getLevel(),
                 player,
                 InteractionHand.MAIN_HAND,
                 player.getMainHandItem(),
-                new BlockHitResult(Vec3.atCenterOf(absolutePos), Direction.UP, absolutePos, false));
+                hitResult(helper, relativePos));
+    }
+
+    private static BlockHitResult hitResult(GameTestHelper helper, BlockPos relativePos) {
+        BlockPos absolutePos = helper.absolutePos(relativePos);
+        return new BlockHitResult(Vec3.atCenterOf(absolutePos), Direction.UP, absolutePos, false);
     }
 
     @GameTest(template = "empty", timeoutTicks = 40)
