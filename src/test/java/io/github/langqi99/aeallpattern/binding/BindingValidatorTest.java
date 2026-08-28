@@ -16,6 +16,10 @@ class BindingValidatorTest {
                 true, false, false, false, false, false, false, false, false, false)));
         assertEquals(BindingDecision.WRONG_OWNER, BindingValidator.validate(new BindingValidator.Context(
                 true, true, false, true, true, true, true, true, true, true)));
+        assertEquals(BindingDecision.WRONG_DIMENSION, BindingValidator.validate(new BindingValidator.Context(
+                true, true, true, false, true, true, true, true, true, true)));
+        assertEquals(BindingDecision.TOO_FAR, BindingValidator.validate(new BindingValidator.Context(
+                true, true, true, true, false, true, true, true, true, true)));
         assertEquals(BindingDecision.ANCHOR_UNLOADED, BindingValidator.validate(new BindingValidator.Context(
                 true, true, true, true, true, false, false, false, true, true)));
         assertEquals(BindingDecision.UNSUPPORTED_TARGET, BindingValidator.validate(new BindingValidator.Context(

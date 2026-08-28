@@ -3,6 +3,8 @@ package io.github.langqi99.aeallpattern.aggregate;
 import appeng.api.crafting.IPatternDetails;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.AEFluidKey;
+import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
 import io.github.langqi99.aeallpattern.AeAllPattern;
@@ -15,6 +17,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.CraftingInput;
@@ -28,6 +34,10 @@ import net.minecraft.world.level.Level;
 
 public final class AggregatePatternExpander {
     static final int MAX_SPLIT_ITEM_INPUTS = 4096;
+    private static final ResourceLocation CHEMICAL_KEY_TYPE =
+            ResourceLocation.fromNamespaceAndPath("appmek", "chemical");
+    static final TagKey<Item> PROCESSING_CATALYSTS = TagKey.create(
+            Registries.ITEM, ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_catalysts"));
 
     private AggregatePatternExpander() {
     }
@@ -41,43 +51,17 @@ public final class AggregatePatternExpander {
 
         List<AggregateRecipe> recipes = AggregatePatternLibrary.get(serverLevel.getServer())
                 .recipes(serverLevel.getServer(), ref.libraryId()).orElse(List.of());
-        AggregatePatternOptions options = aggregateStack.get(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get());
-        if (options == null) {
-            options = AggregatePatternOptions.DEFAULT;
-        }
+        AggregatePatternOptions savedOptions =
+                aggregateStack.get(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get());
+        AggregatePatternOptions options = savedOptions == null ? AggregatePatternOptions.DEFAULT : savedOptions;
 
         List<IPatternDetails> expanded = new ArrayList<>(recipes.size());
         for (AggregateRecipe recipe : recipes) {
             try {
-                if (options.skipProbabilisticMainOutput() && recipe.isProbabilisticOutput(0)) {
-                    continue;
-                }
-                AggregateRecipe configuredRecipe = configureOutputs(recipe, options);
-                List<AggregateInputSlot> configuredInputs = configuredProcessingInputs(
-                        configuredRecipe, options, serverLevel);
-                ItemStack encoded = encode(configuredRecipe, serverLevel);
-                if (encoded.isEmpty()) {
-                    AeAllPattern.LOGGER.debug(
-                            "Cannot encode aggregate {} child {} as {}; skipping instead of changing its pattern type",
-                            ref.libraryId(), recipe.recipeId(), recipe.kind());
-                    continue;
-                }
-                IPatternDetails delegate = PatternDetailsHelper.decodePattern(encoded, level);
-                if (delegate == null) {
-                    // Third-party recipes can be visible to the scanner but not encodable by AE2.
-                    // Skip them quietly; one rejected child must not flood the server log.
-                    continue;
-                }
-
-                encoded.set(ModDataComponents.VIRTUAL_PATTERN_ID.get(),
-                        virtualPatternId(recipe, options, configuredInputs));
-                AEItemKey definition = AEItemKey.of(encoded);
-                if (delegate instanceof IMolecularAssemblerSupportedPattern assemblerPattern) {
-                    expanded.add(new AggregateAssemblerPatternDetails(
-                            recipe.patternId(), definition, assemblerPattern, recipe.processingTicks()));
-                } else {
-                    expanded.add(new AggregatePatternDetails(
-                            recipe.patternId(), definition, delegate, recipe.processingTicks(), configuredInputs));
+                IPatternDetails details = expandRecipe(
+                        recipe, options, serverLevel, "aggregate:" + recipe.patternId());
+                if (details != null) {
+                    expanded.add(details);
                 }
             } catch (RuntimeException error) {
                 AeAllPattern.LOGGER.debug(
@@ -87,9 +71,53 @@ public final class AggregatePatternExpander {
         return List.copyOf(expanded);
     }
 
+    /** Shared child-pattern path used by aggregate items and live linker providers. */
+    public static IPatternDetails expandRecipe(
+            AggregateRecipe recipe,
+            AggregatePatternOptions options,
+            net.minecraft.server.level.ServerLevel level,
+            String virtualIdPrefix) {
+        if (options.skipProbabilisticMainOutput() && recipe.isProbabilisticOutput(0)) {
+            return null;
+        }
+        if (recipe.kind() == AggregatePatternKind.PROCESSING
+                && recipe.outputs().stream().allMatch(stack -> removeOutput(stack.what(), options))) {
+            return null;
+        }
+        AggregateRecipe configuredRecipe = configureOutputs(recipe, options);
+        List<AggregateInputSlot> configuredInputs = configuredProcessingInputs(
+                configuredRecipe, options, level);
+        if (filtersProcessingInputs(options)
+                && configuredRecipe.kind() == AggregatePatternKind.PROCESSING
+                && configuredInputs.isEmpty()) {
+            return null;
+        }
+        ItemStack encoded = encode(configuredRecipe, level, options);
+        if (encoded.isEmpty()) {
+            return null;
+        }
+        IPatternDetails delegate = PatternDetailsHelper.decodePattern(encoded, level);
+        if (delegate == null) {
+            return null;
+        }
+
+        encoded.set(ModDataComponents.VIRTUAL_PATTERN_ID.get(),
+                virtualPatternId(virtualIdPrefix, options, configuredInputs));
+        AEItemKey definition = AEItemKey.of(encoded);
+        if (delegate instanceof IMolecularAssemblerSupportedPattern assemblerPattern) {
+            return new AggregateAssemblerPatternDetails(
+                    recipe.patternId(), definition, assemblerPattern, recipe.processingTicks());
+        }
+        return new AggregatePatternDetails(
+                recipe.patternId(), definition, delegate, recipe.processingTicks(), configuredInputs);
+    }
+
     private static AggregateRecipe configureOutputs(
             AggregateRecipe recipe, AggregatePatternOptions options) {
-        if (!options.ignoreOutputComponents() && !options.ignoreProbabilisticByproducts()) {
+        if (!options.ignoreOutputComponents()
+                && !options.ignoreProbabilisticByproducts()
+                && !options.removeOutputFluids()
+                && !options.removeOutputChemicals()) {
             return recipe;
         }
 
@@ -101,6 +129,9 @@ public final class AggregatePatternExpander {
                 continue;
             }
             GenericStack stack = recipe.outputs().get(sourceIndex);
+            if (recipe.kind() == AggregatePatternKind.PROCESSING && removeOutput(stack.what(), options)) {
+                continue;
+            }
             if (options.ignoreOutputComponents()
                     && stack.what() instanceof AEItemKey itemKey
                     && itemKey.hasComponents()) {
@@ -130,9 +161,16 @@ public final class AggregatePatternExpander {
             return List.of();
         }
 
+        boolean filtersInputs = filtersProcessingInputs(options);
+        List<AggregateInputSlot> slots = filtersInputs
+                ? recipe.inputSlots().stream()
+                        .filter(slot -> !removeInput(slot, options, level))
+                        .toList()
+                : recipe.inputSlots();
+
         if (options.splitSameItems()) {
             List<AggregateInputSlot> result = new ArrayList<>();
-            for (AggregateInputSlot slot : recipe.inputSlots()) {
+            for (AggregateInputSlot slot : slots) {
                 result.addAll(slot.splitUnits(level));
                 if (result.size() > MAX_SPLIT_ITEM_INPUTS) {
                     throw new IllegalArgumentException(
@@ -142,12 +180,40 @@ public final class AggregatePatternExpander {
             return List.copyOf(result);
         }
 
-        if (recipe.inputSlots().stream().noneMatch(AggregateInputSlot::hasAlternatives)) {
+        if (!filtersInputs
+                && slots.stream().noneMatch(AggregateInputSlot::hasAlternatives)) {
             return List.of();
         }
-        return recipe.inputSlots().stream()
+        return slots.stream()
                 .map(slot -> new AggregateInputSlot(slot.resolve(level), Optional.empty()))
                 .toList();
+    }
+
+    private static boolean filtersProcessingInputs(AggregatePatternOptions options) {
+        return options.removeProcessingCatalysts()
+                || options.removeInputFluids()
+                || options.removeInputChemicals();
+    }
+
+    private static boolean removeInput(
+            AggregateInputSlot slot, AggregatePatternOptions options, Level level) {
+        return slot.resolve(level).stream().allMatch(stack -> {
+            AEKey key = stack.what();
+            return options.removeInputFluids() && key instanceof AEFluidKey
+                    || options.removeInputChemicals() && isChemical(key)
+                    || options.removeProcessingCatalysts()
+                            && key instanceof AEItemKey itemKey
+                            && itemKey.toStack().is(PROCESSING_CATALYSTS);
+        });
+    }
+
+    private static boolean removeOutput(AEKey key, AggregatePatternOptions options) {
+        return options.removeOutputFluids() && key instanceof AEFluidKey
+                || options.removeOutputChemicals() && isChemical(key);
+    }
+
+    private static boolean isChemical(AEKey key) {
+        return key.getType().getId().equals(CHEMICAL_KEY_TYPE);
     }
 
     /** Expands every item count n into exactly n independent unit inputs. */
@@ -175,10 +241,10 @@ public final class AggregatePatternExpander {
     }
 
     private static String virtualPatternId(
-            AggregateRecipe recipe,
+            String prefix,
             AggregatePatternOptions options,
             List<AggregateInputSlot> configuredInputs) {
-        String value = "aggregate:" + options.flags() + ":" + recipe.patternId();
+        String value = prefix + ":options=" + options.flags();
         if (!configuredInputs.isEmpty()) {
             // Makes refreshed providers observe datapack/tag membership changes without regenerating the item.
             value += ":inputs=" + Integer.toUnsignedString(configuredInputs.hashCode(), 16);
@@ -191,17 +257,21 @@ public final class AggregatePatternExpander {
     }
 
     private static ItemStack encode(
-            AggregateRecipe recipe, net.minecraft.server.level.ServerLevel level) {
+            AggregateRecipe recipe,
+            net.minecraft.server.level.ServerLevel level,
+            AggregatePatternOptions options) {
         return switch (recipe.kind()) {
             case PROCESSING -> PatternDetailsHelper.encodeProcessingPattern(recipe.inputs(), recipe.outputs());
-            case CRAFTING -> encodeCrafting(recipe, level);
-            case STONECUTTING -> encodeStonecutting(recipe, level);
-            case SMITHING -> encodeSmithing(recipe, level);
+            case CRAFTING -> encodeCrafting(recipe, level, options);
+            case STONECUTTING -> encodeStonecutting(recipe, level, options);
+            case SMITHING -> encodeSmithing(recipe, level, options);
         };
     }
 
     private static ItemStack encodeCrafting(
-            AggregateRecipe aggregate, net.minecraft.server.level.ServerLevel level) {
+            AggregateRecipe aggregate,
+            net.minecraft.server.level.ServerLevel level,
+            AggregatePatternOptions options) {
         ItemStack[] storedGrid = storedCraftingGrid(aggregate.inputs());
         Optional<RecipeHolder<CraftingRecipe>> holder = craftingHolder(aggregate, storedGrid, level);
         if (holder.isEmpty()) {
@@ -219,7 +289,9 @@ public final class AggregatePatternExpander {
         if (output.isEmpty()) {
             return ItemStack.EMPTY;
         }
-        return PatternDetailsHelper.encodeCraftingPattern(holder.orElseThrow(), grid, output, true, false);
+        return PatternDetailsHelper.encodeCraftingPattern(
+                holder.orElseThrow(), grid, output,
+                options.allowItemSubstitutions(), options.allowFluidSubstitutions());
     }
 
     private static Optional<RecipeHolder<CraftingRecipe>> craftingHolder(
@@ -240,7 +312,9 @@ public final class AggregatePatternExpander {
     }
 
     private static ItemStack encodeStonecutting(
-            AggregateRecipe aggregate, net.minecraft.server.level.ServerLevel level) {
+            AggregateRecipe aggregate,
+            net.minecraft.server.level.ServerLevel level,
+            AggregatePatternOptions options) {
         Optional<RecipeHolder<?>> rawHolder = level.getRecipeManager().byKey(aggregate.recipeId());
         if (rawHolder.isEmpty() || !(rawHolder.orElseThrow().value() instanceof StonecutterRecipe)) {
             return ItemStack.EMPTY;
@@ -251,11 +325,13 @@ public final class AggregatePatternExpander {
             return ItemStack.EMPTY;
         }
         return PatternDetailsHelper.encodeStonecuttingPattern(
-                castHolder(rawHolder.orElseThrow()), input, output, true);
+                castHolder(rawHolder.orElseThrow()), input, output, options.allowItemSubstitutions());
     }
 
     private static ItemStack encodeSmithing(
-            AggregateRecipe aggregate, net.minecraft.server.level.ServerLevel level) {
+            AggregateRecipe aggregate,
+            net.minecraft.server.level.ServerLevel level,
+            AggregatePatternOptions options) {
         Optional<RecipeHolder<?>> rawHolder = level.getRecipeManager().byKey(aggregate.recipeId());
         if (rawHolder.isEmpty() || !(rawHolder.orElseThrow().value() instanceof SmithingRecipe recipe)) {
             return ItemStack.EMPTY;
@@ -268,7 +344,8 @@ public final class AggregatePatternExpander {
             return ItemStack.EMPTY;
         }
         return PatternDetailsHelper.encodeSmithingTablePattern(
-                castHolder(rawHolder.orElseThrow()), template, base, addition, output, true);
+                castHolder(rawHolder.orElseThrow()), template, base, addition, output,
+                options.allowItemSubstitutions());
     }
 
     private static ItemStack[] craftingGrid(CraftingRecipe recipe) {

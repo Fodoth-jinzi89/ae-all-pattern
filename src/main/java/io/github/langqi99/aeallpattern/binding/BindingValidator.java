@@ -15,7 +15,7 @@ public final class BindingValidator {
         if (!context.ownerMatches()) {
             return BindingDecision.WRONG_OWNER;
         }
-        if (!context.sameDimension()) {
+        if (!context.dimensionAllowed()) {
             return BindingDecision.WRONG_DIMENSION;
         }
         if (!context.withinRange()) {
@@ -43,7 +43,7 @@ public final class BindingValidator {
             boolean selectionPresent,
             boolean schemaSupported,
             boolean ownerMatches,
-            boolean sameDimension,
+            boolean dimensionAllowed,
             boolean withinRange,
             boolean anchorLoaded,
             boolean anchorMatches,

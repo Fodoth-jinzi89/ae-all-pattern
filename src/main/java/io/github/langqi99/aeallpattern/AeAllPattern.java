@@ -12,10 +12,13 @@ import io.github.langqi99.aeallpattern.network.BindingNetwork;
 import io.github.langqi99.aeallpattern.network.BindingSyncService;
 import io.github.langqi99.aeallpattern.network.AggregateMetadataSyncService;
 import io.github.langqi99.aeallpattern.client.ClientEvents;
+import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
 import io.github.langqi99.aeallpattern.diagnostics.ModCommands;
 import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import org.slf4j.Logger;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.api.distmarker.Dist;
@@ -26,7 +29,8 @@ public final class AeAllPattern {
     public static final String MOD_ID = "aeallpattern";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public AeAllPattern(IEventBus modBus) {
+    public AeAllPattern(IEventBus modBus, ModContainer container) {
+        container.registerConfig(ModConfig.Type.COMMON, AeAllPatternCommonConfig.SPEC);
         ModBlocks.register(modBus);
         ModBlockEntities.register(modBus);
         ModDataComponents.register(modBus);
@@ -44,6 +48,7 @@ public final class AeAllPattern {
         NeoForge.EVENT_BUS.addListener(ModCommands::register);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(ClientEvents::registerScreens);
+            modBus.addListener(ClientEvents::registerConfigScreen);
             ClientEvents.register();
         }
         LOGGER.info("AE All Pattern initialized");

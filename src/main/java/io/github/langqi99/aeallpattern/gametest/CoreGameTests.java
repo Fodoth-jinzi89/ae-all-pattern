@@ -13,10 +13,14 @@ import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.KeyCounter;
+import appeng.api.ids.AEComponents;
 import appeng.core.definitions.AEBlocks;
+import appeng.core.definitions.AEItems;
+import appeng.crafting.pattern.EncodedCraftingPattern;
 import appeng.blockentity.crafting.PatternProviderBlockEntity;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternData;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternConfigMenu;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternDecoder;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
 import io.github.langqi99.aeallpattern.aggregate.AggregateInputSlot;
@@ -93,6 +97,33 @@ public final class CoreGameTests {
                     "unexpected idle power usage");
             helper.succeed();
         });
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void linkerPatternOptionsPersistAndMenuToggles(GameTestHelper helper) {
+        BlockPos pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, ModBlocks.PATTERN_LINKER.get());
+        PatternLinkerBlockEntity linker = helper.getBlockEntity(pos);
+        var player = helper.makeMockPlayer(GameType.CREATIVE);
+        player.setPos(linker.getBlockPos().getCenter());
+        linker.setOwner(player);
+
+        AggregatePatternConfigMenu menu = new AggregatePatternConfigMenu(
+                1, player.getInventory(), linker.getBlockPos());
+        helper.assertTrue(menu.stillValid(player), "owner could not configure a nearby linker");
+        helper.assertTrue(menu.clickMenuButton(
+                        player, AggregatePatternConfigMenu.TOGGLE_REMOVE_INPUT_FLUIDS),
+                "linker option button was rejected");
+        helper.assertTrue(linker.getPatternOptions().removeInputFluids(),
+                "linker did not store the configured aggregate option");
+
+        var saved = linker.saveWithFullMetadata(helper.getLevel().registryAccess());
+        BlockEntity restored = BlockEntity.loadStatic(
+                linker.getBlockPos(), helper.getBlockState(pos), saved, helper.getLevel().registryAccess());
+        helper.assertTrue(restored instanceof PatternLinkerBlockEntity restoredLinker
+                        && restoredLinker.getPatternOptions().removeInputFluids(),
+                "linker pattern options did not survive block entity persistence");
+        helper.succeed();
     }
 
     @GameTest(template = "empty", timeoutTicks = 80)
@@ -573,7 +604,7 @@ public final class CoreGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 40)
-    public static void aggregateCraftingUsesNativeIngredientSubstitution(GameTestHelper helper) {
+    public static void aggregateCraftingUsesItemSubstitution(GameTestHelper helper) {
         AggregateRecipe recipe = new AggregateRecipe(
                 "native-chest-tag-test",
                 ResourceLocation.withDefaultNamespace("chest"),
@@ -590,11 +621,23 @@ public final class CoreGameTests {
 
         List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
         helper.assertValueEqual(expanded.size(), 1, "native chest aggregate recipe was not published");
+        EncodedCraftingPattern defaults = expanded.getFirst().getDefinition().toStack()
+                .get(AEComponents.ENCODED_CRAFTING_PATTERN);
+        helper.assertTrue(defaults != null && !defaults.canSubstitute() && defaults.canSubstituteFluids(),
+                "default AE2 substitution flags were not item-off/fluid-on");
+
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get(),
+                new AggregatePatternOptions(false, false, true, true, false, true, false));
+        expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
         helper.assertTrue(expanded.getFirst() instanceof IMolecularAssemblerSupportedPattern,
                 "native chest recipe was not kept as a molecular assembler pattern");
+        EncodedCraftingPattern toggled = expanded.getFirst().getDefinition().toStack()
+                .get(AEComponents.ENCODED_CRAFTING_PATTERN);
+        helper.assertTrue(toggled != null && toggled.canSubstitute() && !toggled.canSubstituteFluids(),
+                "configured AE2 substitution flags were not item-on/fluid-off");
         helper.assertTrue(Arrays.stream(expanded.getFirst().getInputs()).anyMatch(input ->
                         input.isValid(AEItemKey.of(Items.BIRCH_PLANKS), helper.getLevel())),
-                "AE native ingredient substitution did not accept another plank type");
+                "AE item substitution did not accept another plank type");
         helper.succeed();
     }
 
@@ -633,6 +676,45 @@ public final class CoreGameTests {
                             && input.isValid(AEItemKey.of(Items.BIRCH_PLANKS), helper.getLevel()),
                     "split input cannot independently mix different plank types");
         }
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void aggregateProcessingCatalystsCanBeRemoved(GameTestHelper helper) {
+        GenericStack press = GenericStack.fromItemStack(AEItems.CALCULATION_PROCESSOR_PRESS.stack());
+        GenericStack iron = GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT));
+        AggregateRecipe mixedInputs = new AggregateRecipe(
+                "processing-catalyst-test",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_catalyst_test"),
+                AggregatePatternKind.PROCESSING,
+                List.of(press, iron),
+                List.of(AggregateInputSlot.exact(press), AggregateInputSlot.exact(iron)),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                1);
+        AggregateRecipe catalystOnly = new AggregateRecipe(
+                "processing-catalyst-only-test",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_catalyst_only_test"),
+                AggregatePatternKind.PROCESSING,
+                List.of(press),
+                List.of(AggregateInputSlot.exact(press)),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_catalyst_test"),
+                "block.aeallpattern.processing_catalyst_test", List.of(mixedInputs, catalystOnly));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get(),
+                new AggregatePatternOptions(false, false, true, true, true));
+
+        List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
+        helper.assertValueEqual(expanded.size(), 1,
+                "a catalyst-only recipe was published or the mixed recipe was removed");
+        helper.assertValueEqual(expanded.getFirst().getInputs().length, 1,
+                "the reusable processing catalyst was not removed");
+        helper.assertTrue(expanded.getFirst().getInputs()[0].isValid(AEItemKey.of(Items.IRON_INGOT), helper.getLevel()),
+                "catalyst filtering changed the remaining material input");
         helper.succeed();
     }
 
@@ -694,6 +776,62 @@ public final class CoreGameTests {
                             .anyMatch(candidate -> candidate.what().equals(converted.what())
                                     && candidate.amount() * input.getMultiplier() == converted.amount())),
                     "AE2 processing pattern lost its Chemical input");
+
+            GenericStack water = new GenericStack(AEFluidKey.of(Fluids.WATER), 1_000L);
+            GenericStack iron = GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT));
+            GenericStack gold = GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT));
+            AggregateRecipe filteredRecipe = new AggregateRecipe(
+                    "fluid-chemical-filter-test",
+                    ResourceLocation.fromNamespaceAndPath("aeallpattern", "fluid_chemical_filter_test"),
+                    AggregatePatternKind.PROCESSING,
+                    List.of(converted, water, iron),
+                    List.of(
+                            AggregateInputSlot.exact(converted),
+                            AggregateInputSlot.exact(water),
+                            AggregateInputSlot.exact(iron)),
+                    List.of(converted, water, gold),
+                    1);
+            AggregateRecipe noInputs = new AggregateRecipe(
+                    "fluid-filter-empty-input-test",
+                    ResourceLocation.fromNamespaceAndPath("aeallpattern", "fluid_filter_empty_input_test"),
+                    AggregatePatternKind.PROCESSING,
+                    List.of(water),
+                    List.of(AggregateInputSlot.exact(water)),
+                    List.of(gold),
+                    1);
+            AggregateRecipe noOutputs = new AggregateRecipe(
+                    "chemical-filter-empty-output-test",
+                    ResourceLocation.fromNamespaceAndPath("aeallpattern", "chemical_filter_empty_output_test"),
+                    AggregatePatternKind.PROCESSING,
+                    List.of(iron),
+                    List.of(AggregateInputSlot.exact(iron)),
+                    List.of(converted),
+                    1);
+            AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                    helper.getLevel().getServer(),
+                    ResourceLocation.fromNamespaceAndPath("aeallpattern", "fluid_chemical_filter_test"),
+                    "block.aeallpattern.fluid_chemical_filter_test",
+                    List.of(filteredRecipe, noInputs, noOutputs));
+            ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+            aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+            aggregate.set(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get(),
+                    new AggregatePatternOptions(
+                            false, false, true, true, false, false, true,
+                            true, true, true, true));
+
+            List<IPatternDetails> expanded = AggregatePatternExpander.expand(aggregate, helper.getLevel());
+            helper.assertValueEqual(expanded.size(), 1,
+                    "a recipe left without inputs or outputs was published");
+            helper.assertValueEqual(expanded.getFirst().getInputs().length, 1,
+                    "fluid or chemical processing input was not removed");
+            helper.assertTrue(expanded.getFirst().getInputs()[0]
+                            .isValid(AEItemKey.of(Items.IRON_INGOT), helper.getLevel()),
+                    "fluid and chemical input filtering changed the remaining item");
+            helper.assertValueEqual(expanded.getFirst().getOutputs().size(), 1,
+                    "fluid or chemical processing output was not removed");
+            helper.assertTrue(expanded.getFirst().getOutputs().getFirst().what() instanceof AEItemKey key
+                            && key.is(Items.GOLD_INGOT),
+                    "fluid and chemical output filtering changed the remaining item");
             helper.succeed();
         } catch (ReflectiveOperationException error) {
             throw new AssertionError("Applied Mekanistics JEI chemical conversion failed", error);

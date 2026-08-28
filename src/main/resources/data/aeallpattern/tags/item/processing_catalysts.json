@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "#ae2:inscriber_presses",
+    {
+      "id": "extendedae:concurrent_processor_press",
+      "required": false
+    }
+  ]
+}

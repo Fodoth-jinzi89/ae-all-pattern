@@ -8,6 +8,7 @@ import dev.emi.emi.api.stack.*;
 import dev.nolij.toomanyrecipeviewers.impl.ingredient.TMRVStack;
 import io.github.langqi99.aeallpattern.aggregate.*;
 import io.github.langqi99.aeallpattern.AeAllPattern;
+import io.github.langqi99.aeallpattern.client.ClientRecipeMachineResolver;
 import io.github.langqi99.aeallpattern.network.GenerateAggregatePayload;
 import io.netty.buffer.Unpooled;
 import java.lang.reflect.Method;
@@ -34,8 +35,9 @@ public final class EmiAggregateScanner {
     public static boolean scan(BlockPos pos) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) return true;
-        Block block = minecraft.level.getBlockState(pos).getBlock();
-        ItemStack machine = block.asItem().getDefaultInstance();
+        BlockPos machinePos = ClientRecipeMachineResolver.resolvePosition(minecraft.level, pos);
+        Block block = minecraft.level.getBlockState(machinePos).getBlock();
+        ItemStack machine = ClientRecipeMachineResolver.recipeViewerCatalyst(minecraft.level, machinePos);
         if (machine.isEmpty()) return false;
         EmiRecipeManager manager = EmiApi.getRecipeManager();
         EmiStack machineStack = EmiStack.of(machine);
@@ -50,7 +52,7 @@ public final class EmiAggregateScanner {
         var connection = minecraft.getConnection();
         if (connection == null) { RUNNING.set(false); return true; }
         ResourceLocation catalystId = BuiltInRegistries.BLOCK.getKey(block);
-        CompletableFuture.runAsync(() -> buildAndSend(pos, catalystId, block.getDescriptionId(), candidates,
+        CompletableFuture.runAsync(() -> buildAndSend(machinePos, catalystId, block.getDescriptionId(), candidates,
                 connection.registryAccess(), connection.getConnectionType()))
                 .whenComplete((ignored, error) -> RUNNING.set(false));
         return true;
@@ -111,13 +113,21 @@ public final class EmiAggregateScanner {
     }
 
     private static Optional<AggregateRecipe> toAggregate(EmiRecipe recipe, Set<String> ids) {
-        if (recipe.getInputs().isEmpty() || recipe.getInputs().size() > 9 || recipe.getOutputs().isEmpty()) return Optional.empty();
-        int limit = Math.max(1, 512 / recipe.getInputs().size());
-        List<AggregateInputSlot> inputs = recipe.getInputs().stream().map(i -> input(i, limit)).flatMap(Optional::stream).toList();
+        List<EmiIngredient> recipeInputs = recipe.getInputs().stream()
+                .filter(ingredient -> !ingredient.isEmpty())
+                .toList();
+        if (recipeInputs.isEmpty() || recipeInputs.size() > AggregateRecipe.MAX_INPUTS
+                || recipe.getOutputs().isEmpty()) return Optional.empty();
+        int limit = Math.min(
+                AggregateInputSlot.MAX_ALTERNATIVES,
+                AggregateRecipe.MAX_TOTAL_INPUT_ALTERNATIVES / recipeInputs.size());
+        List<AggregateInputSlot> inputs = recipeInputs.stream()
+                .map(i -> input(i, limit)).flatMap(Optional::stream).toList();
         List<ScannedOutput> scannedOutputs = recipe.getOutputs().stream()
-                .map(EmiAggregateScanner::output).flatMap(Optional::stream).limit(3).toList();
+                .map(EmiAggregateScanner::output).flatMap(Optional::stream)
+                .limit(AggregateRecipe.MAX_OUTPUTS).toList();
         List<GenericStack> outputs = scannedOutputs.stream().map(ScannedOutput::stack).toList();
-        if (inputs.size() != recipe.getInputs().size() || outputs.isEmpty()) return Optional.empty();
+        if (inputs.size() != recipeInputs.size() || outputs.isEmpty()) return Optional.empty();
         RecipeHolder<?> backing = recipe.getBackingRecipe();
         if (backing != null && backing.value() instanceof CraftingRecipe && backing.value().isSpecial()) {
             return Optional.empty();

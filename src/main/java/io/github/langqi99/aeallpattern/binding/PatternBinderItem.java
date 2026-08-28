@@ -1,5 +1,6 @@
 package io.github.langqi99.aeallpattern.binding;
 
+import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
 import io.github.langqi99.aeallpattern.linker.PatternLinkerBlockEntity;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
@@ -22,8 +23,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 
 /** Server-authoritative two-step binding tool. */
 public final class PatternBinderItem extends Item {
-    private static final double MAX_BINDING_DISTANCE_SQUARED = 64.0 * 64.0;
-
     public PatternBinderItem(Properties properties) {
         super(properties);
     }
@@ -95,15 +94,17 @@ public final class PatternBinderItem extends Item {
 
         ServerLevel anchorLevel = targetLevel.getServer().getLevel(selection.anchor().dimension());
         boolean sameDimension = selection.anchor().dimension().equals(targetLevel.dimension());
+        boolean dimensionAllowed = sameDimension || AeAllPatternCommonConfig.LINKER_ALLOW_CROSS_DIMENSION.get();
         boolean anchorLoaded = anchorLevel != null && anchorLevel.hasChunkAt(selection.anchor().pos());
         BlockEntity rawAnchor = anchorLoaded ? anchorLevel.getBlockEntity(selection.anchor().pos()) : null;
         PatternLinkerBlockEntity linker = rawAnchor instanceof PatternLinkerBlockEntity found ? found : null;
         boolean ownerMatches = selection.ownerId().equals(player.getUUID())
                 && (linker == null || linker.isOwnedBy(player));
-        boolean withinRange = sameDimension
-                && player.distanceToSqr(selection.anchor().pos().getCenter()) <= MAX_BINDING_DISTANCE_SQUARED
-                && player.distanceToSqr(targetPos.getCenter()) <= MAX_BINDING_DISTANCE_SQUARED
-                && selection.anchor().pos().distSqr(targetPos) <= MAX_BINDING_DISTANCE_SQUARED;
+        double maxDistanceSquared = AeAllPatternCommonConfig.maxBindingDistanceSquared();
+        boolean withinRange = player.distanceToSqr(targetPos.getCenter()) <= maxDistanceSquared
+                && (!sameDimension
+                        || player.distanceToSqr(selection.anchor().pos().getCenter()) <= maxDistanceSquared
+                                && selection.anchor().pos().distSqr(targetPos) <= maxDistanceSquared);
         boolean anchorMatches = linker != null
                 && selection.anchorFingerprint().equals(BlockEntityFingerprint.of(linker));
         var targetAdapter = targetBlockEntity == null
@@ -122,7 +123,7 @@ public final class PatternBinderItem extends Item {
                 true,
                 selection.hasSupportedSchema(),
                 ownerMatches,
-                sameDimension,
+                dimensionAllowed,
                 withinRange,
                 anchorLoaded,
                 anchorMatches,
@@ -130,7 +131,12 @@ public final class PatternBinderItem extends Item {
                 targetSupported,
                 targetAvailable));
         if (decision != BindingDecision.SUCCESS) {
-            show(player, "message.aeallpattern.binding." + decision.name().toLowerCase());
+            if (decision == BindingDecision.TOO_FAR) {
+                show(player, "message.aeallpattern.binding.too_far",
+                        AeAllPatternCommonConfig.LINKER_MAX_BINDING_DISTANCE.getAsInt());
+            } else {
+                show(player, "message.aeallpattern.binding." + decision.name().toLowerCase());
+            }
             return InteractionResult.FAIL;
         }
 

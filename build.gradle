@@ -114,6 +114,8 @@ dependencies {
     // but still expose JEI integrations to the scanner through TMRV.
     compileOnly "maven.modrinth:emi:1.1.24+1.21.1+neoforge"
     compileOnly "maven.modrinth:yFypjcfd:pEhG9g9P"
+    compileOnly "maven.modrinth:cloth-config:15.0.140+neoforge"
+    localRuntime "maven.modrinth:cloth-config:15.0.140+neoforge"
 
     // Mekanism is optional. Keep its classes out of common signatures and load adapters conditionally.
     compileOnly "mekanism:Mekanism:${mekanism_version}:api"

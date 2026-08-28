@@ -1,0 +1,50 @@
+package io.github.langqi99.aeallpattern.client;
+
+import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
+import me.shedaniel.clothconfig2.api.ConfigBuilder;
+import me.shedaniel.clothconfig2.api.ConfigCategory;
+import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.neoforged.fml.ModLoadingContext;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+
+public final class AeAllPatternConfigScreen {
+    private AeAllPatternConfigScreen() {
+    }
+
+    public static void register() {
+        ModLoadingContext.get().registerExtensionPoint(
+                IConfigScreenFactory.class,
+                () -> (minecraft, parent) -> create(parent));
+    }
+
+    public static Screen create(Screen parent) {
+        ConfigBuilder builder = ConfigBuilder.create()
+                .setParentScreen(parent)
+                .setTitle(Component.translatable("config.aeallpattern.title"));
+        ConfigEntryBuilder entries = builder.entryBuilder();
+        ConfigCategory linker = builder.getOrCreateCategory(
+                Component.translatable("config.aeallpattern.pattern_linker"));
+
+        linker.addEntry(entries.startIntField(
+                        Component.translatable("config.aeallpattern.max_binding_distance"),
+                        AeAllPatternCommonConfig.LINKER_MAX_BINDING_DISTANCE.getAsInt())
+                .setDefaultValue(0)
+                .setMin(0)
+                .setMax(30_000_000)
+                .setTooltip(Component.translatable("config.aeallpattern.max_binding_distance.tooltip"))
+                .setSaveConsumer(AeAllPatternCommonConfig.LINKER_MAX_BINDING_DISTANCE::set)
+                .build());
+        linker.addEntry(entries.startBooleanToggle(
+                        Component.translatable("config.aeallpattern.allow_cross_dimension"),
+                        AeAllPatternCommonConfig.LINKER_ALLOW_CROSS_DIMENSION.get())
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("config.aeallpattern.allow_cross_dimension.tooltip"))
+                .setSaveConsumer(AeAllPatternCommonConfig.LINKER_ALLOW_CROSS_DIMENSION::set)
+                .build());
+
+        builder.setSavingRunnable(AeAllPatternCommonConfig.SPEC::save);
+        return builder.build();
+    }
+}

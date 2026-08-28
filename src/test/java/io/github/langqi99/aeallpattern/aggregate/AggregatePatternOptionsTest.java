@@ -12,16 +12,32 @@ class AggregatePatternOptionsTest {
         assertFalse(AggregatePatternOptions.DEFAULT.ignoreOutputComponents());
         assertTrue(AggregatePatternOptions.DEFAULT.skipProbabilisticMainOutput());
         assertTrue(AggregatePatternOptions.DEFAULT.ignoreProbabilisticByproducts());
+        assertFalse(AggregatePatternOptions.DEFAULT.removeProcessingCatalysts());
+        assertFalse(AggregatePatternOptions.DEFAULT.allowItemSubstitutions());
+        assertTrue(AggregatePatternOptions.DEFAULT.allowFluidSubstitutions());
+        assertFalse(AggregatePatternOptions.DEFAULT.removeInputFluids());
+        assertFalse(AggregatePatternOptions.DEFAULT.removeOutputFluids());
+        assertFalse(AggregatePatternOptions.DEFAULT.removeInputChemicals());
+        assertFalse(AggregatePatternOptions.DEFAULT.removeOutputChemicals());
     }
 
     @Test
-    void flagsRoundTripAllFourOptions() {
-        var options = new AggregatePatternOptions(true, false, false, true);
+    void flagsRoundTripAllElevenOptions() {
+        var options = new AggregatePatternOptions(
+                true, false, false, true, true, false, true,
+                true, false, true, false);
         var decoded = AggregatePatternOptions.fromFlags(options.flags());
 
         assertTrue(decoded.splitSameItems());
         assertFalse(decoded.ignoreOutputComponents());
         assertFalse(decoded.skipProbabilisticMainOutput());
         assertTrue(decoded.ignoreProbabilisticByproducts());
+        assertTrue(decoded.removeProcessingCatalysts());
+        assertFalse(decoded.allowItemSubstitutions());
+        assertTrue(decoded.allowFluidSubstitutions());
+        assertTrue(decoded.removeInputFluids());
+        assertFalse(decoded.removeOutputFluids());
+        assertTrue(decoded.removeInputChemicals());
+        assertFalse(decoded.removeOutputChemicals());
     }
 }
