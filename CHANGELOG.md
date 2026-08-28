@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.7 - 2026-08-29
+
+- Expanded aggregate-pattern configuration and execution for candidate inputs, input ordering, probabilistic outputs, and multi-output recipes.
+- Added aggregate-pattern support for PackagedAuto packaging providers while preserving the selected target-machine workflow.
+- Added optional compatibility for the Useless Mod advanced alloy furnace.
+- Added aliases for Mekanism Extras factories and fixed TMRV package recipe ID resolution.
+- Fixed aggregate generation leaking recipes from unrelated machines into the selected target.
+- Let the pattern binder select linkers reliably and extended linker support to automated workstations.
+- Added regression coverage for machine resolution, aggregate input limits, binding validation, packaging, and expanded pattern options.
+- Fixed the merged optional-mixin gate so clean builds and both dependency-matrix GameTest runs compile again.
+
 ## 0.1.6 - 2026-08-28
 
 - Added EMI + TooManyRecipeViewers support to the aggregate-pattern generator, including JEI compatibility recipes exposed through TMRV.
