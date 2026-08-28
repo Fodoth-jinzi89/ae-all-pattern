@@ -4,6 +4,7 @@ import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
 import io.github.langqi99.aeallpattern.linker.PatternLinkerBlockEntity;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
+import io.github.langqi99.aeallpattern.machine.MachineTargetResolver;
 import io.github.langqi99.aeallpattern.network.BindingSyncService;
 import java.util.List;
 import java.util.Optional;
@@ -45,11 +46,12 @@ public final class PatternBinderItem extends Item {
         BlockEntity clickedBlockEntity = level.getBlockEntity(clickedPos);
         ItemStack binder = context.getItemInHand();
 
-        if (!context.isSecondaryUseActive() && clickedBlockEntity instanceof PatternLinkerBlockEntity linker) {
+        if (context.isSecondaryUseActive() && clickedBlockEntity instanceof PatternLinkerBlockEntity linker) {
             return selectAnchor(level, clickedPos, player, binder, linker);
         }
         if (context.isSecondaryUseActive()) {
-            return finishBinding(level, clickedPos, context, player, binder, clickedBlockEntity);
+            BlockPos targetPos = MachineTargetResolver.resolvePosition(level, clickedPos);
+            return finishBinding(level, targetPos, context, player, binder, level.getBlockEntity(targetPos));
         }
         return InteractionResult.PASS;
     }

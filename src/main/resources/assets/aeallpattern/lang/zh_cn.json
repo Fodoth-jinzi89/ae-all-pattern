@@ -60,7 +60,7 @@
   "gui.aeallpattern.routing.high": "高",
   "gui.aeallpattern.routing.fast_value": "快",
   "gui.aeallpattern.routing.reset": "恢复默认",
-  "tooltip.aeallpattern.pattern_binder.unbound": "右击全样板链接器以选择锚点",
+  "tooltip.aeallpattern.pattern_binder.unbound": "潜行右击全样板链接器以选择锚点",
   "tooltip.aeallpattern.pattern_binder.selected": "已选择：%s [%s, %s, %s]",
   "tooltip.aeallpattern.pattern_binder.continuous": "可继续潜行右击其他机器进行绑定",
   "tooltip.aeallpattern.generator.usage": "潜行右击机器，生成它的全部样板",
@@ -125,6 +125,6 @@
   "message.aeallpattern.binding.unsupported_target": "这台机器没有受支持的确定性配方适配器",
   "message.aeallpattern.binding.target_occupied": "这台机器已绑定到另一个链接器或属于其他玩家",
   "itemGroup.aeallpattern": "AE 全样板",
-  "jei.aeallpattern.pattern_binder.info": "先右击全样板链接器，再潜行右击任意数量的受支持机器进行连续绑定。服务端会把这些机器的确定性配方直接发布到相连的 AE2 网络。",
+  "jei.aeallpattern.pattern_binder.info": "先潜行右击全样板链接器，再潜行右击任意数量的受支持机器进行连续绑定；潜行右击其他链接器可以换绑。服务端会把这些机器的确定性配方直接发布到相连的 AE2 网络。",
   "jei.aeallpattern.pattern_linker.info": "占用一个 AE2 频道并消耗 2 AE/t。虚拟处理样板显示在 AE2 合成终端中；机器输出仍需建立返回网络的路径。"
 }

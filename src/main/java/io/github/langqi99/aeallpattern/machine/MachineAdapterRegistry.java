@@ -19,6 +19,9 @@ public final class MachineAdapterRegistry {
         if (ModList.get().isLoaded("mekanism")) {
             io.github.langqi99.aeallpattern.compat.mekanism.MekanismAdapters.registerAll();
         }
+        if (ModList.get().isLoaded("packagedexcrafting") || ModList.get().isLoaded("packagedavaritia")) {
+            register(new PackagedCraftingAdapter());
+        }
     }
 
     private MachineAdapterRegistry() {

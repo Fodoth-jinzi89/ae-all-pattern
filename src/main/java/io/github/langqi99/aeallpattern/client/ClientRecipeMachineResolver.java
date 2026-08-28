@@ -1,6 +1,6 @@
 package io.github.langqi99.aeallpattern.client;
 
-import java.lang.reflect.Method;
+import io.github.langqi99.aeallpattern.machine.MachineTargetResolver;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -10,7 +10,6 @@ import net.minecraft.world.level.Level;
 
 /** Resolves recipe-viewer workstations that differ from the clicked block. */
 public final class ClientRecipeMachineResolver {
-    private static final String MEKANISM_BOUNDING_TILE = "mekanism.common.tile.TileEntityBoundingBlock";
     private static final Map<ResourceLocation, ResourceLocation> CATALYST_ALIASES = Map.ofEntries(
             alias("packagedexcrafting", "basic_crafter", "extendedcrafting", "basic_table"),
             alias("packagedexcrafting", "advanced_crafter", "extendedcrafting", "advanced_table"),
@@ -29,17 +28,7 @@ public final class ClientRecipeMachineResolver {
     }
 
     public static BlockPos resolvePosition(Level level, BlockPos clickedPos) {
-        Object blockEntity = level.getBlockEntity(clickedPos);
-        if (blockEntity == null || !blockEntity.getClass().getName().equals(MEKANISM_BOUNDING_TILE)) {
-            return clickedPos;
-        }
-        try {
-            Method getMainPos = blockEntity.getClass().getMethod("getMainPos");
-            Object mainPos = getMainPos.invoke(blockEntity);
-            return mainPos instanceof BlockPos pos && level.hasChunkAt(pos) ? pos.immutable() : clickedPos;
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            return clickedPos;
-        }
+        return MachineTargetResolver.resolvePosition(level, clickedPos);
     }
 
     public static ItemStack recipeViewerCatalyst(Level level, BlockPos machinePos) {
