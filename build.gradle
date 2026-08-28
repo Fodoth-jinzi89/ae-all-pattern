@@ -106,7 +106,8 @@ dependencies {
     // AE2 is required and supplies the public crafting-provider API.
     implementation "org.appliedenergistics:appliedenergistics2:${ae2_version}"
 
-    // Optional client recipe-viewer bridge used only when EMI and TMRV are present.
+    // Optional client recipe-viewer bridges. EMI + TMRV replace the JEI runtime,
+    // but still expose JEI integrations to the scanner through TMRV.
     compileOnly "maven.modrinth:emi:1.1.24+1.21.1+neoforge"
     compileOnly "maven.modrinth:yFypjcfd:pEhG9g9P"
 
@@ -118,8 +119,14 @@ dependencies {
 
     // JEI is optional and client-only. The server recipe index must not depend on it.
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
-    if (project.property('runtime_jei').toBoolean()) {
+    if (project.property('runtime_emi').toBoolean()) {
+        localRuntime "maven.modrinth:emi:1.1.24+1.21.1+neoforge"
+        localRuntime "maven.modrinth:yFypjcfd:pEhG9g9P"
+    } else if (project.property('runtime_jei').toBoolean()) {
         localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    }
+    if (project.property('runtime_jei').toBoolean()
+            || project.property('runtime_emi').toBoolean()) {
         localRuntime "curse.maven:ae2-jei-integration-1074338:${ae2_jei_integration_file_id}"
     }
 
@@ -127,7 +134,8 @@ dependencies {
     // Mekanism chemicals to that same registry and owns their transport logic.
     compileOnly "curse.maven:ae2-jei-integration-1074338:${ae2_jei_integration_file_id}"
     compileOnly "curse.maven:applied-mekanistics-574300:${applied_mekanistics_file_id}"
-    if (project.property('runtime_jei').toBoolean()
+    if ((project.property('runtime_jei').toBoolean()
+            || project.property('runtime_emi').toBoolean())
             && project.property('runtime_mekanism').toBoolean()) {
         localRuntime "curse.maven:applied-mekanistics-574300:${applied_mekanistics_file_id}"
     }

@@ -114,7 +114,9 @@ public final class EmiAggregateScanner {
         if (recipe.getInputs().isEmpty() || recipe.getInputs().size() > 9 || recipe.getOutputs().isEmpty()) return Optional.empty();
         int limit = Math.max(1, 512 / recipe.getInputs().size());
         List<AggregateInputSlot> inputs = recipe.getInputs().stream().map(i -> input(i, limit)).flatMap(Optional::stream).toList();
-        List<GenericStack> outputs = recipe.getOutputs().stream().map(EmiAggregateScanner::stack).flatMap(Optional::stream).limit(3).toList();
+        List<ScannedOutput> scannedOutputs = recipe.getOutputs().stream()
+                .map(EmiAggregateScanner::output).flatMap(Optional::stream).limit(3).toList();
+        List<GenericStack> outputs = scannedOutputs.stream().map(ScannedOutput::stack).toList();
         if (inputs.size() != recipe.getInputs().size() || outputs.isEmpty()) return Optional.empty();
         RecipeHolder<?> backing = recipe.getBackingRecipe();
         if (backing != null && backing.value() instanceof CraftingRecipe && backing.value().isSpecial()) {
@@ -125,7 +127,20 @@ public final class EmiAggregateScanner {
         String patternId = recipe.getCategory().getId() + "/" + id;
         if (!ids.add(patternId)) return Optional.empty();
         return Optional.of(new AggregateRecipe(patternId, id, kind(backing),
-                inputs.stream().map(AggregateInputSlot::primary).toList(), inputs, outputs, 1));
+                inputs.stream().map(AggregateInputSlot::primary).toList(), inputs, outputs,
+                probabilisticOutputMask(scannedOutputs), 1));
+    }
+
+    private static Optional<ScannedOutput> output(EmiStack output) {
+        return stack(output).map(stack -> new ScannedOutput(stack, output.getChance() < 0.999_999F));
+    }
+
+    private static int probabilisticOutputMask(List<ScannedOutput> outputs) {
+        int mask = 0;
+        for (int index = 0; index < outputs.size(); index++) {
+            if (outputs.get(index).probabilistic()) mask |= 1 << index;
+        }
+        return mask;
     }
 
     private static Optional<AggregateInputSlot> input(EmiIngredient ingredient, int limit) {
@@ -187,4 +202,6 @@ public final class EmiAggregateScanner {
         var player = Minecraft.getInstance().player;
         if (player != null) player.displayClientMessage(net.minecraft.network.chat.Component.translatable(key), true);
     }
+
+    private record ScannedOutput(GenericStack stack, boolean probabilistic) {}
 }
