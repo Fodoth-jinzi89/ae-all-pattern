@@ -60,7 +60,7 @@
   "gui.aeallpattern.routing.high": "High",
   "gui.aeallpattern.routing.fast_value": "Fast",
   "gui.aeallpattern.routing.reset": "Reset",
-  "tooltip.aeallpattern.pattern_binder.unbound": "Right-click an All Pattern Linker to select it",
+  "tooltip.aeallpattern.pattern_binder.unbound": "Sneak-right-click an All Pattern Linker to select it",
   "tooltip.aeallpattern.pattern_binder.selected": "Selected: %s [%s, %s, %s]",
   "tooltip.aeallpattern.pattern_binder.continuous": "Sneak-right-click more machines to keep binding",
   "tooltip.aeallpattern.generator.usage": "Sneak-right-click a machine to capture all of its patterns",
@@ -125,6 +125,6 @@
   "message.aeallpattern.binding.unsupported_target": "This machine has no supported deterministic recipe adapter",
   "message.aeallpattern.binding.target_occupied": "This machine is already bound to another linker or player",
   "itemGroup.aeallpattern": "AE All Pattern",
-  "jei.aeallpattern.pattern_binder.info": "Right-click a Pattern Linker, then sneak-right-click any number of supported machines for continuous binding. The server publishes their deterministic recipes directly to the connected AE2 network.",
+  "jei.aeallpattern.pattern_binder.info": "Sneak-right-click a Pattern Linker, then sneak-right-click any number of supported machines for continuous binding. Sneak-right-click another linker to switch. The server publishes their deterministic recipes directly to the connected AE2 network.",
   "jei.aeallpattern.pattern_linker.info": "Consumes one AE2 channel and 2 AE/t. Virtual processing patterns are visible in AE2 crafting terminals; machine output must have a route back into the network."
 }

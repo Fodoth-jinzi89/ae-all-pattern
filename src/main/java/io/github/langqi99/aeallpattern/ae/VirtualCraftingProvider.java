@@ -56,21 +56,8 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
             PerformanceMetrics.pushRejected();
             return false;
         }
-        ItemStack expected = route.recipe.input();
-        AEItemKey expectedKey = AEItemKey.of(expected);
-        long available = 0;
-        for (KeyCounter counter : inputHolders) {
-            for (var entry : counter) {
-                if (!entry.getKey().equals(expectedKey) && entry.getLongValue() > 0) {
-                    PerformanceMetrics.pushRejected();
-                    return false;
-                }
-                if (entry.getKey().equals(expectedKey)) {
-                    available += entry.getLongValue();
-                }
-            }
-        }
-        if (available != expected.getCount()) {
+        List<ItemStack> inputs = suppliedInputs(virtual, inputHolders);
+        if (inputs.isEmpty()) {
             PerformanceMetrics.pushRejected();
             return false;
         }
@@ -83,7 +70,8 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
         buffer.enqueue(
                 route.binding,
                 route.recipe.fingerprint().stableKey(),
-                expected,
+                route.recipe,
+                inputs,
                 route.recipe.output(),
                 route.recipe.processingTicks());
         linker.saveChanges();
@@ -135,11 +123,6 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
             }
             var catalog = RecipeIndexService.catalog(targetLevel, target, adapter.get());
             for (RecipeSnapshot recipe : catalog.recipes()) {
-                // The linker queue is intentionally lossless but currently owns one input stack.
-                // Multi-input recipes are published by aggregate patterns in a normal AE provider.
-                if (recipe.inputs().size() != 1) {
-                    continue;
-                }
                 BindingPatternKey patternKey = new BindingPatternKey(binding.bindingId(), recipe.fingerprint());
                 AggregateRecipe aggregateRecipe = AggregateRecipe.from(recipe);
                 IPatternDetails processed = AggregatePatternExpander.expandRecipe(
@@ -193,6 +176,44 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
         }
         BlockEntity target = targetLevel.getBlockEntity(route.binding.target().pos());
         return target != null && route.binding.targetFingerprint().equals(BlockEntityFingerprint.of(target));
+    }
+
+    private List<ItemStack> suppliedInputs(VirtualPatternDetails details, KeyCounter[] holders) {
+        IPatternDetails.IInput[] expected = details.getInputs();
+        if (holders.length != expected.length) {
+            return List.of();
+        }
+        List<ItemStack> result = new ArrayList<>(holders.length);
+        for (int index = 0; index < holders.length; index++) {
+            AEItemKey key = null;
+            long amount = 0;
+            for (var entry : holders[index]) {
+                if (entry.getLongValue() <= 0) {
+                    continue;
+                }
+                if (!(entry.getKey() instanceof AEItemKey itemKey) || key != null) {
+                    return List.of();
+                }
+                key = itemKey;
+                amount = entry.getLongValue();
+            }
+            if (key == null || amount < 1 || amount > Integer.MAX_VALUE
+                    || !expected[index].isValid(key, linker.getLevel())) {
+                return List.of();
+            }
+            long required = -1;
+            for (var possible : expected[index].getPossibleInputs()) {
+                if (possible.what().equals(key)) {
+                    required = possible.amount() * expected[index].getMultiplier();
+                    break;
+                }
+            }
+            if (amount != required) {
+                return List.of();
+            }
+            result.add(key.toStack((int) amount));
+        }
+        return List.copyOf(result);
     }
 
     private record PatternRoute(BindingRecord binding, RecipeSnapshot recipe) {

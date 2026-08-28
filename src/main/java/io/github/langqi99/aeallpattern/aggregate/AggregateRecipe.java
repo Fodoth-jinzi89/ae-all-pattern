@@ -93,11 +93,19 @@ public record AggregateRecipe(
     }
 
     public static AggregateRecipe from(RecipeSnapshot snapshot) {
+        List<AggregateInputSlot> slots = snapshot.inputAlternatives().stream()
+                .map(alternatives -> new AggregateInputSlot(
+                        alternatives.stream().map(GenericStack::fromItemStack).toList(),
+                        java.util.Optional.empty()))
+                .toList();
         return new AggregateRecipe(
                 snapshot.fingerprint().stableKey(),
                 snapshot.recipeId(),
-                snapshot.inputs().stream().map(GenericStack::fromItemStack).toList(),
+                AggregatePatternKind.PROCESSING,
+                slots.stream().map(AggregateInputSlot::primary).toList(),
+                slots,
                 List.of(GenericStack.fromItemStack(snapshot.output())),
+                0,
                 snapshot.processingTicks());
     }
 

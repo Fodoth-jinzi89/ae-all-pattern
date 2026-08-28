@@ -36,6 +36,8 @@ import io.github.langqi99.aeallpattern.linker.IncomingBuffer;
 import io.github.langqi99.aeallpattern.linker.PatternLinkerBlockEntity;
 import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
 import io.github.langqi99.aeallpattern.recipe.RecipeIndexService;
+import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
+import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
 import io.github.langqi99.aeallpattern.registry.ModBlocks;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
@@ -60,7 +62,6 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -271,10 +272,12 @@ public final class CoreGameTests {
     @GameTest(template = "empty", timeoutTicks = 80)
     public static void binderKeepsAnchorForContinuousBindings(GameTestHelper helper) {
         BlockPos linkerPos = new BlockPos(1, 1, 1);
+        BlockPos replacementLinkerPos = new BlockPos(2, 1, 2);
         BlockPos energyPos = new BlockPos(1, 1, 2);
         BlockPos firstTarget = new BlockPos(3, 1, 1);
         BlockPos secondTarget = new BlockPos(4, 1, 1);
         helper.setBlock(linkerPos, ModBlocks.PATTERN_LINKER.get());
+        helper.setBlock(replacementLinkerPos, ModBlocks.PATTERN_LINKER.get());
         helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
         helper.setBlock(firstTarget, Blocks.FURNACE);
         helper.setBlock(secondTarget, Blocks.FURNACE);
@@ -289,23 +292,17 @@ public final class CoreGameTests {
             ItemStack binder = new ItemStack(ModItems.PATTERN_BINDER.get());
             player.setItemInHand(InteractionHand.MAIN_HAND, binder);
 
-            player.setShiftKeyDown(false);
-            BlockPos absoluteLinkerPos = helper.absolutePos(linkerPos);
-            ItemInteractionResult blockResult = helper.getLevel().getBlockState(absoluteLinkerPos).useItemOn(
-                    binder,
-                    helper.getLevel(),
-                    player,
-                    InteractionHand.MAIN_HAND,
-                    hitResult(helper, linkerPos));
-            helper.assertValueEqual(
-                    blockResult,
-                    ItemInteractionResult.SKIP_DEFAULT_BLOCK_INTERACTION,
-                    "linker default interaction intercepted the pattern binder");
+            player.setShiftKeyDown(true);
             ModItems.PATTERN_BINDER.get().useOn(context(helper, player, linkerPos));
             helper.assertTrue(binder.has(ModDataComponents.ANCHOR_SELECTION.get()),
-                    "right-clicking a linker with the binder did not store an anchor");
+                    "sneak-right-clicking a linker with the binder did not store an anchor");
 
-            player.setShiftKeyDown(true);
+            ModItems.PATTERN_BINDER.get().useOn(context(helper, player, replacementLinkerPos));
+            helper.assertValueEqual(
+                    binder.get(ModDataComponents.ANCHOR_SELECTION.get()).anchor().pos(),
+                    helper.absolutePos(replacementLinkerPos),
+                    "sneak-right-clicking another linker did not replace the selected anchor");
+
             ModItems.PATTERN_BINDER.get().useOn(context(helper, player, firstTarget));
             helper.assertTrue(binder.has(ModDataComponents.ANCHOR_SELECTION.get()),
                     "first binding cleared the selected linker");
@@ -947,6 +944,110 @@ public final class CoreGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 40)
+    public static void incomingBufferPersistsAllRecipeInputs(GameTestHelper helper) {
+        UUID bindingId = UUID.randomUUID();
+        BindingRecord binding = new BindingRecord(
+                1,
+                bindingId,
+                UUID.randomUUID(),
+                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(0, 1, 0))),
+                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(1, 1, 0))),
+                Direction.UP,
+                "anchor",
+                "target",
+                "aeallpattern:test_multi",
+                1,
+                helper.getLevel().getGameTime(),
+                helper.getLevel().getGameTime());
+        List<ItemStack> inputs = List.of(new ItemStack(Items.IRON_INGOT), new ItemStack(Items.REDSTONE, 2));
+        ResourceLocation recipeId = ResourceLocation.parse("aeallpattern:test_multi");
+        RecipeSnapshot recipe = new RecipeSnapshot(
+                recipeId,
+                inputs,
+                new ItemStack(Items.COMPASS),
+                new RecipeFingerprint("aeallpattern:test_multi", recipeId.toString(), "inputs", "output", 1),
+                20);
+        IncomingBuffer original = new IncomingBuffer();
+        original.enqueue(binding, "pattern", recipe, inputs, recipe.output(), recipe.processingTicks());
+        var tag = new net.minecraft.nbt.CompoundTag();
+        original.save(tag, helper.getLevel().registryAccess());
+
+        IncomingBuffer restored = new IncomingBuffer();
+        restored.load(tag, helper.getLevel().registryAccess());
+        helper.assertValueEqual(restored.recoverableDrops().size(), 2, "multi-input queue lost a stack");
+        List<ItemStack> recovered = restored.removeBinding(bindingId);
+        helper.assertValueEqual(recovered.size(), 2, "unbind did not recover every recipe input");
+        helper.assertTrue(recovered.stream().anyMatch(stack -> stack.is(Items.REDSTONE) && stack.getCount() == 2),
+                "multi-input count changed during persistence");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 80)
+    public static void packagedCrafterAdapterLoadsConditionally(GameTestHelper helper) {
+        var crafter = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("packagedexcrafting", "elite_crafter"));
+        if (crafter.isEmpty()) {
+            helper.succeed();
+            return;
+        }
+        BlockPos pos = new BlockPos(0, 1, 0);
+        helper.setBlock(pos, crafter.get());
+        BlockEntity machine = helper.getBlockEntity(pos);
+        var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
+        helper.assertTrue(adapter.isPresent(), "PackagedExCrafting adapter was not found");
+        helper.assertValueEqual(adapter.orElseThrow().id().toString(), "aeallpattern:packaged_crafting",
+                "wrong packaged crafting adapter selected");
+        var catalog = RecipeIndexService.catalog(helper.getLevel(), machine, adapter.orElseThrow());
+        helper.assertFalse(catalog.recipes().isEmpty(), "PackagedExCrafting catalog is empty");
+        RecipeSnapshot recipe = catalog.recipes().getFirst();
+        BindingRecord binding = bindingFor(helper, pos, adapter.orElseThrow());
+        helper.assertTrue(adapter.orElseThrow().insertRecipe(
+                        helper.getLevel(), binding, recipe, recipe.inputs()),
+                "PackagedExCrafting machine rejected its discovered recipe");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 80)
+    public static void packagedAvaritiaAdapterExecutesConditionally(GameTestHelper helper) {
+        var crafter = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("packagedavaritia", "extreme_crafter"));
+        if (crafter.isEmpty()) {
+            helper.succeed();
+            return;
+        }
+        BlockPos pos = new BlockPos(0, 1, 0);
+        helper.setBlock(pos, crafter.get());
+        BlockEntity machine = helper.getBlockEntity(pos);
+        var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
+        helper.assertTrue(adapter.isPresent(), "PackagedAvaritia adapter was not found");
+        var catalog = RecipeIndexService.catalog(helper.getLevel(), machine, adapter.orElseThrow());
+        helper.assertFalse(catalog.recipes().isEmpty(), "PackagedAvaritia catalog is empty");
+        RecipeSnapshot recipe = catalog.recipes().getFirst();
+        helper.assertTrue(adapter.orElseThrow().insertRecipe(
+                        helper.getLevel(), bindingFor(helper, pos, adapter.orElseThrow()), recipe, recipe.inputs()),
+                "PackagedAvaritia machine rejected its discovered recipe");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 80)
+    public static void mekmmItemMachineAdapterLoadsConditionally(GameTestHelper helper) {
+        var lathe = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("mekmm", "cnc_lathe"));
+        if (lathe.isEmpty()) {
+            helper.succeed();
+            return;
+        }
+        BlockPos pos = new BlockPos(0, 1, 0);
+        helper.setBlock(pos, lathe.get());
+        BlockEntity machine = helper.getBlockEntity(pos);
+        var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
+        helper.assertTrue(adapter.isPresent(), "MekMM lathing adapter was not found");
+        helper.assertValueEqual(adapter.orElseThrow().id().toString(), "mekanism:lathing",
+                "wrong MekMM adapter selected");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
     public static void mekanismAdapterLoadsConditionally(GameTestHelper helper) {
         var smelter = BuiltInRegistries.BLOCK.getOptional(
                 ResourceLocation.fromNamespaceAndPath("mekanism", "energized_smelter"));
@@ -964,5 +1065,22 @@ public final class CoreGameTests {
         var catalog = RecipeIndexService.catalog(helper.getLevel(), machine, adapter.orElseThrow());
         helper.assertFalse(catalog.recipes().isEmpty(), "Mekanism smelting catalog is empty");
         helper.succeed();
+    }
+
+    private static BindingRecord bindingFor(
+            GameTestHelper helper, BlockPos relativeTarget, io.github.langqi99.aeallpattern.machine.MachineAdapter adapter) {
+        return new BindingRecord(
+                1,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(1, 1, 1))),
+                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(relativeTarget)),
+                Direction.NORTH,
+                "anchor",
+                "target",
+                adapter.id().toString(),
+                adapter.schemaVersion(),
+                helper.getLevel().getGameTime(),
+                helper.getLevel().getGameTime());
     }
 }

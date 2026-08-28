@@ -36,6 +36,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
     private final ResourceLocation id;
     private final Supplier<RecipeType<ItemStackToItemStackRecipe>> recipeType;
     private final boolean vanillaSmelting;
+    private final String machineNamespace;
     private final String singleMachinePath;
     private final String factorySuffix;
 
@@ -47,6 +48,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
         this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
         this.recipeType = recipeType;
         this.vanillaSmelting = false;
+        this.machineNamespace = "mekanism";
         this.singleMachinePath = singleMachinePath;
         this.factorySuffix = factorySuffix;
     }
@@ -55,6 +57,21 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
         this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
         this.recipeType = null;
         this.vanillaSmelting = true;
+        this.machineNamespace = "mekanism";
+        this.singleMachinePath = singleMachinePath;
+        this.factorySuffix = factorySuffix;
+    }
+
+    MekanismItemToItemAdapter(
+            String idPath,
+            Supplier<RecipeType<ItemStackToItemStackRecipe>> recipeType,
+            String machineNamespace,
+            String singleMachinePath,
+            String factorySuffix) {
+        this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
+        this.recipeType = recipeType;
+        this.vanillaSmelting = false;
+        this.machineNamespace = machineNamespace;
         this.singleMachinePath = singleMachinePath;
         this.factorySuffix = factorySuffix;
     }
@@ -72,7 +89,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
     @Override
     public boolean supports(ServerLevel level, BlockEntity target) {
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(target.getBlockState().getBlock());
-        return blockId.getNamespace().equals("mekanism")
+        return blockId.getNamespace().equals(machineNamespace)
                 && (blockId.getPath().equals(singleMachinePath) || blockId.getPath().endsWith("_" + factorySuffix));
     }
 
