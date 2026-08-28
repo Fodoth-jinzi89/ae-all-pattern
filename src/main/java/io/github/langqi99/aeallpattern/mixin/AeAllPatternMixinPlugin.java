@@ -15,6 +15,9 @@ public final class AeAllPatternMixinPlugin implements IMixinConfigPlugin {
         if (mixin.endsWith("ECOCraftingPatternBusBlockEntityMixin")) {
             return loaded("neoecoae");
         }
+        if (mixin.endsWith("AdvancedAlloyFurnaceAeManagerMixin")) {
+            return loaded("useless_mod");
+        }
         return true;
     }
     private static boolean loaded(String modId) {
