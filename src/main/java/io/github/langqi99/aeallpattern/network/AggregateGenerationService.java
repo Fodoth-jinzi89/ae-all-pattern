@@ -2,6 +2,7 @@ package io.github.langqi99.aeallpattern.network;
 
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternLibrary;
 import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
+import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import java.util.ArrayList;
@@ -70,8 +71,16 @@ public final class AggregateGenerationService {
             return false;
         }
         var block = player.level().getBlockState(payload.machinePos()).getBlock();
-        return BuiltInRegistries.BLOCK.getKey(block).equals(payload.catalystId())
-                && block.getDescriptionId().equals(payload.machineTranslationKey());
+        if (!BuiltInRegistries.BLOCK.getKey(block).equals(payload.catalystId())
+                || !block.getDescriptionId().equals(payload.machineTranslationKey())) {
+            return false;
+        }
+        // Exact server-side adapters own their recipe catalog. Do not let a client
+        // JEI scan create a second, category-wide aggregate for the same machine.
+        var target = player.level().getBlockEntity(payload.machinePos());
+        // Blocks without block entities (currently the crafting table) use native AE
+        // crafting patterns and have no server-side machine adapter to validate.
+        return target == null || MachineAdapterRegistry.find(player.serverLevel(), target).isEmpty();
     }
 
     private static boolean holdsGenerator(ServerPlayer player) {
