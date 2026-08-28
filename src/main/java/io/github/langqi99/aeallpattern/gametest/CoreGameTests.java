@@ -1023,11 +1023,19 @@ public final class CoreGameTests {
         BlockEntity machine = helper.getBlockEntity(crafterPos);
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine).orElseThrow();
         RecipeSnapshot recipe = RecipeIndexService.catalog(helper.getLevel(), machine, adapter).recipes().getFirst();
+        ResourceLocation viewerRecipeId = ResourceLocation.fromNamespaceAndPath(
+                "toomanyrecipeviewers", "/" + recipe.recipeId().getNamespace() + "/" + recipe.recipeId().getPath());
+        RecipeSnapshot viewerRecipe = RecipeSnapshot.withAlternatives(
+                viewerRecipeId,
+                recipe.inputAlternatives(),
+                recipe.output(),
+                recipe.fingerprint(),
+                recipe.processingTicks());
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
                 ResourceLocation.fromNamespaceAndPath("extendedcrafting", "ender_crafter"),
                 "block.extendedcrafting.ender_crafter",
-                List.of(AggregateRecipe.from(recipe)));
+                List.of(AggregateRecipe.from(viewerRecipe)));
         ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
         aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
 

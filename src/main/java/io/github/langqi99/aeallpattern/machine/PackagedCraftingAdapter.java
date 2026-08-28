@@ -214,7 +214,8 @@ final class PackagedCraftingAdapter implements MachineAdapter {
     private static Object specializedRecipeInfo(
             ServerLevel level, Spec spec, AggregateRecipe aggregateRecipe) {
         try {
-            RecipeHolder<?> holder = level.getRecipeManager().byKey(aggregateRecipe.recipeId()).orElse(null);
+            ResourceLocation recipeId = serverRecipeId(aggregateRecipe.recipeId());
+            RecipeHolder<?> holder = level.getRecipeManager().byKey(recipeId).orElse(null);
             if (holder == null || (spec.tier > 0 && invokeInt(holder.value(), "getTier") != spec.tier)) {
                 return null;
             }
@@ -226,6 +227,17 @@ final class PackagedCraftingAdapter implements MachineAdapter {
                     "Unable to rebuild specialized package recipe {}", aggregateRecipe.recipeId(), error);
             return null;
         }
+    }
+
+    private static ResourceLocation serverRecipeId(ResourceLocation recipeId) {
+        if (!recipeId.getNamespace().equals("toomanyrecipeviewers") || !recipeId.getPath().startsWith("/")) {
+            return recipeId;
+        }
+        String value = recipeId.getPath().substring(1);
+        int separator = value.indexOf('/');
+        return separator > 0 && separator < value.length() - 1
+                ? ResourceLocation.fromNamespaceAndPath(value.substring(0, separator), value.substring(separator + 1))
+                : recipeId;
     }
 
     private static Object processingRecipeInfo(
