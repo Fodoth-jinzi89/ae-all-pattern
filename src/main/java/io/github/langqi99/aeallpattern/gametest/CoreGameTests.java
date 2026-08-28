@@ -1032,8 +1032,8 @@ public final class CoreGameTests {
         ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
         aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
 
-        BlockPos providerPos = new BlockPos(2, 1, 0);
-        BlockPos energyPos = new BlockPos(2, 1, 1);
+        BlockPos providerPos = new BlockPos(1, 1, 0);
+        BlockPos energyPos = new BlockPos(1, 1, 1);
         helper.setBlock(providerPos, providerBlock.get());
         helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
         helper.runAfterDelay(10, () -> {
@@ -1049,8 +1049,7 @@ public final class CoreGameTests {
                 helper.assertValueEqual(recipeList.size(), 1,
                         "ME packaging provider did not expand the aggregate package recipe");
                 IManagedGridNode node = (IManagedGridNode) provider.getClass().getMethod("getMainNode").invoke(provider);
-                helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(recipe.output())),
-                        "AE network did not receive the aggregate direct crafting recipe");
+                assertAggregatePackageWorkflow(helper, provider, node, recipe.output());
 
                 AggregatePatternRef genericRef = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                         helper.getLevel().getServer(),
@@ -1066,13 +1065,45 @@ public final class CoreGameTests {
                 helper.assertValueEqual(recipeList.getFirst().getClass().getName(),
                         "thelm.packagedauto.recipe.ProcessingPackageRecipeInfo",
                         "ME packaging provider used the wrong generic package recipe type");
-                helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(recipe.output())),
-                        "AE network did not receive the generic aggregate direct crafting recipe");
+                assertAggregatePackageWorkflow(helper, provider, node, recipe.output());
             } catch (ReflectiveOperationException error) {
                 throw new IllegalStateException("Unable to inspect the optional ME packaging provider", error);
             }
             helper.succeed();
         });
+    }
+
+    private static void assertAggregatePackageWorkflow(
+            GameTestHelper helper, BlockEntity provider, IManagedGridNode node, ItemStack output)
+            throws ReflectiveOperationException {
+        List<?> available = (List<?>) provider.getClass().getMethod("getAvailablePatterns").invoke(provider);
+        List<IPatternDetails> packaging = available.stream()
+                .filter(pattern -> pattern.getClass().getName().endsWith("PackageCraftingPatternDetails"))
+                .map(IPatternDetails.class::cast)
+                .toList();
+        List<IPatternDetails> unpackaging = available.stream()
+                .filter(pattern -> pattern.getClass().getName().endsWith("RecipeCraftingPatternDetails"))
+                .map(IPatternDetails.class::cast)
+                .toList();
+        helper.assertTrue(available.stream().noneMatch(
+                        pattern -> pattern.getClass().getName().endsWith("DirectCraftingPatternDetails")),
+                "aggregate recipe still exposed PackagedAuto's direct shortcut");
+        helper.assertFalse(packaging.isEmpty(), "aggregate recipe did not expose package crafting patterns");
+        helper.assertValueEqual(unpackaging.size(), 1,
+                "aggregate recipe did not expose exactly one unpackaging pattern");
+
+        Set<Object> packageOutputs = packaging.stream()
+                .flatMap(pattern -> pattern.getOutputs().stream())
+                .map(GenericStack::what)
+                .collect(java.util.stream.Collectors.toSet());
+        for (IPatternDetails.IInput input : unpackaging.getFirst().getInputs()) {
+            helper.assertTrue(Arrays.stream(input.getPossibleInputs())
+                            .map(GenericStack::what)
+                            .anyMatch(packageOutputs::contains),
+                    "unpackaging recipe input is not produced by a package crafting pattern");
+        }
+        helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(output)),
+                "AE network did not receive the aggregate package workflow's final output");
     }
 
     @GameTest(template = "empty")
