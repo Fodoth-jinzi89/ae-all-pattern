@@ -113,12 +113,15 @@ public final class ClientJeiAggregateScanner {
         List<AggregateRecipe> recipes = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         IFocusGroup emptyFocus = focusFactory.getEmptyFocusGroup();
-        for (IRecipeCategory<?> category : categories) {
-            scanCategory(runtime, category, emptyFocus, recipes, seen);
-            if (recipes.size() >= MAX_RECIPES) {
-                break;
-            }
+        // A compatibility machine may register the clicked block as a catalyst for
+        // its own category. A native JEI category is owned by the same namespace as
+        // the clicked machine, so never fall back to an unrelated category.
+        IRecipeCategory<?> category = findNativeCategory(categories, catalyst);
+        if (category == null) {
+            show("message.aeallpattern.generator.no_jei_recipes");
+            return;
         }
+        scanCategory(runtime, category, emptyFocus, recipes, seen);
         if (recipes.isEmpty()) {
             show("message.aeallpattern.generator.no_item_recipes");
             return;
@@ -232,6 +235,16 @@ public final class ClientJeiAggregateScanner {
             return AggregatePatternKind.SMITHING;
         }
         return AggregatePatternKind.PROCESSING;
+    }
+
+    private static IRecipeCategory<?> findNativeCategory(
+            List<IRecipeCategory<?>> categories, ItemStack catalyst) {
+        ResourceLocation catalystId = BuiltInRegistries.ITEM.getKey(catalyst.getItem());
+        return categories.stream()
+                .filter(category -> category.getRecipeType().getUid().getNamespace()
+                        .equals(catalystId.getNamespace()))
+                .findFirst()
+                .orElse(null);
     }
 
     private static Optional<GenericStack> chooseStack(IRecipeSlotView slot) {

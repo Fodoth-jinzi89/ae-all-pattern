@@ -17,6 +17,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.fml.ModList;
 
@@ -41,11 +42,6 @@ public final class AllPatternGeneratorItem extends Item {
         if (context.getLevel().isClientSide()) {
             return InteractionResult.SUCCESS;
         }
-        // With JEI present, the client scans the clicked catalyst without a machine whitelist
-        // and sends the concrete recipe snapshot to the authoritative server.
-        if (ModList.get().isLoaded("jei")) {
-            return InteractionResult.SUCCESS;
-        }
         if (!(context.getLevel() instanceof ServerLevel level)) {
             return InteractionResult.FAIL;
         }
@@ -53,11 +49,21 @@ public final class AllPatternGeneratorItem extends Item {
         BlockPos pos = context.getClickedPos();
         BlockEntity target = level.getBlockEntity(pos);
         if (target == null) {
+            // A crafting table has no block entity. Its recipes are consumed directly
+            // by AE's crafting-pattern path, so accept the client-side crafting scan.
+            if (level.getBlockState(pos).is(Blocks.CRAFTING_TABLE) && ModList.get().isLoaded("jei")) {
+                return InteractionResult.SUCCESS;
+            }
             show(player, "message.aeallpattern.generator.unsupported");
             return InteractionResult.FAIL;
         }
         var adapter = MachineAdapterRegistry.find(level, target);
         if (adapter.isEmpty()) {
+            // Unsupported machines are discovered through the client's JEI view. The
+            // scanner accepts only a JEI category owned by the target machine's mod.
+            if (ModList.get().isLoaded("jei")) {
+                return InteractionResult.SUCCESS;
+            }
             show(player, "message.aeallpattern.generator.unsupported");
             return InteractionResult.FAIL;
         }
