@@ -33,7 +33,11 @@ public final class IncomingBuffer {
     private final List<RecoveredOutput> recoveredOutputs = new ArrayList<>();
 
     public boolean canAccept(UUID bindingId) {
-        return queue.size() < MAX_QUEUED_CRAFTS && !hasWork(bindingId);
+        return queue.size() < MAX_QUEUED_CRAFTS;
+    }
+
+    public boolean hasCapacity() {
+        return queue.size() < MAX_QUEUED_CRAFTS;
     }
 
     public boolean hasWork(UUID bindingId) {

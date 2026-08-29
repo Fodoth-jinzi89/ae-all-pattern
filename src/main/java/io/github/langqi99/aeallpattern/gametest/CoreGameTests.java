@@ -945,6 +945,30 @@ public final class CoreGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 40)
+    public static void incomingBufferQueuesMultipleCraftsForBinding(GameTestHelper helper) {
+        UUID bindingId = UUID.randomUUID();
+        BindingRecord binding = new BindingRecord(
+                1,
+                bindingId,
+                UUID.randomUUID(),
+                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(0, 1, 0))),
+                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(1, 1, 0))),
+                Direction.UP,
+                "anchor",
+                "target",
+                "minecraft:furnace",
+                1,
+                helper.getLevel().getGameTime(),
+                helper.getLevel().getGameTime());
+        IncomingBuffer buffer = new IncomingBuffer();
+        buffer.enqueue(binding, "pattern", new ItemStack(Items.RAW_IRON), new ItemStack(Items.IRON_INGOT), 20);
+        buffer.enqueue(binding, "pattern", new ItemStack(Items.RAW_IRON), new ItemStack(Items.IRON_INGOT), 20);
+        helper.assertValueEqual(buffer.recoverableDrops().size(), 2,
+                "same binding rejected a second queued craft");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
     public static void incomingBufferPersistsAllRecipeInputs(GameTestHelper helper) {
         UUID bindingId = UUID.randomUUID();
         BindingRecord binding = new BindingRecord(

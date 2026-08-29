@@ -81,10 +81,7 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
 
     @Override
     public boolean isBusy() {
-        if (routes.isEmpty()) {
-            return true;
-        }
-        return routes.values().stream().allMatch(route -> buffer.hasWork(route.binding.bindingId()));
+        return routes.isEmpty() || !buffer.hasCapacity();
     }
 
     public long catalogGeneration() {
