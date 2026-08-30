@@ -121,7 +121,8 @@ public final class ClientJeiAggregateScanner {
             show("message.aeallpattern.generator.no_jei_recipes");
             return;
         }
-        scanCategory(runtime, category, emptyFocus, recipes, seen);
+        boolean chemicalOnly = isChemicalInputMachine(catalyst);
+        scanCategory(runtime, category, emptyFocus, recipes, seen, chemicalOnly);
         if (recipes.isEmpty()) {
             show("message.aeallpattern.generator.no_item_recipes");
             return;
@@ -148,7 +149,8 @@ public final class ClientJeiAggregateScanner {
             IRecipeCategory category,
             IFocusGroup emptyFocus,
             List<AggregateRecipe> destination,
-            Set<String> seen) {
+            Set<String> seen,
+            boolean chemicalOnly) {
         IRecipeManager manager = runtime.getRecipeManager();
         ResourceLocation categoryId = category.getRecipeType().getUid();
         AggregatePatternKind kind = patternKind(categoryId);
@@ -173,10 +175,10 @@ public final class ClientJeiAggregateScanner {
                     MAX_EXPLICIT_ALTERNATIVES_PER_SLOT,
                     AggregateRecipe.MAX_TOTAL_INPUT_ALTERNATIVES / Math.max(1, inputViews.size()));
             for (IRecipeSlotView slot : inputViews) {
-                Optional<AggregateInputSlot> input = chooseInputSlot(slot, alternativesPerSlot);
+                Optional<AggregateInputSlot> input = chooseInputSlot(slot, alternativesPerSlot, chemicalOnly);
                 if (input.isPresent()) {
                     inputSlots.add(input.orElseThrow());
-                } else if (!slot.isEmpty()) {
+                } else if (!chemicalOnly && !slot.isEmpty()) {
                     valid = false;
                     break;
                 }
@@ -311,12 +313,14 @@ public final class ClientJeiAggregateScanner {
                 || normalized.contains("확률");
     }
 
-    private static Optional<AggregateInputSlot> chooseInputSlot(IRecipeSlotView slot, int alternativeLimit) {
+    private static Optional<AggregateInputSlot> chooseInputSlot(
+            IRecipeSlotView slot, int alternativeLimit, boolean chemicalOnly) {
         LinkedHashMap<String, GenericStack> unique = new LinkedHashMap<>();
         slot.getAllIngredients()
                 .map(ClientJeiAggregateScanner::toGenericStack)
                 .flatMap(Optional::stream)
                 .filter(stack -> stack.what() != null && stack.amount() > 0)
+                .filter(stack -> !chemicalOnly || isChemical(stack))
                 .sorted(Comparator.comparing(ClientJeiAggregateScanner::normalize))
                 .limit(AggregateInputSlot.MAX_ALTERNATIVES)
                 .forEach(stack -> unique.putIfAbsent(normalize(stack), stack));
@@ -334,6 +338,25 @@ public final class ClientJeiAggregateScanner {
         return Optional.of(new AggregateInputSlot(
                 candidates.stream().limit(alternativeLimit).toList(),
                 Optional.empty()));
+    }
+
+    /**
+     * Mekanism exposes these recipes through JEI as an item-or-chemical input
+     * slot. AE patterns must select the chemical side for automated execution;
+     * the item side is not a valid alternative for the machine's input handler.
+     */
+    private static boolean isChemicalInputMachine(ItemStack catalyst) {
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(catalyst.getItem());
+        return id.getNamespace().equals("mekanism")
+                && (id.getPath().equals("metallurgic_infuser")
+                        || id.getPath().endsWith("_infusing_factory")
+                        || id.getPath().equals("osmium_compressor")
+                        || id.getPath().endsWith("_compressing_factory"));
+    }
+
+    private static boolean isChemical(GenericStack stack) {
+        return stack.what().getType().getId().equals(
+                ResourceLocation.fromNamespaceAndPath("appmek", "chemical"));
     }
 
     private static Optional<ResourceLocation> exactItemTag(List<GenericStack> candidates) {

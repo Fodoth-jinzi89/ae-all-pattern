@@ -110,6 +110,11 @@ dependencies {
     // AE2 is required and supplies the public crafting-provider API.
     implementation "org.appliedenergistics:appliedenergistics2:${ae2_version}"
 
+    // Optional external planner. When present, the mixin plugin delegates
+    // CraftingCalculation to Thunderbolt 2 instead of stacking the embedded
+    // legacy planner. The local jar is compile-only and is never bundled.
+    compileOnly files('libs/complieOnly/thunderbolt-2.0.0-beta.2.jar')
+
     // Optional client recipe-viewer bridges. EMI + TMRV replace the JEI runtime,
     // but still expose JEI integrations to the scanner through TMRV.
     compileOnly "maven.modrinth:emi:1.1.24+1.21.1+neoforge"
@@ -202,6 +207,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             mod_version            : mod_version,
             ae2_version_range      : ae2_version_range,
             mekanism_version_range : mekanism_version_range,
+            thunderbolt_version_range: thunderbolt_version_range,
     ]
     inputs.properties replaceProperties
     expand replaceProperties
@@ -273,9 +279,6 @@ def verifyReleaseJar = tasks.register('verifyReleaseJar') {
             }
             def metadataEntry = zip.getEntry('META-INF/neoforge.mods.toml')
             def metadata = zip.getInputStream(metadataEntry).getText('UTF-8')
-            if (metadata =~ /(?i)modId\s*=\s*"thunderbolt"/) {
-                throw new GradleException('Release JAR must not require or declare Thunderbolt')
-            }
         } finally {
             zip.close()
         }
