@@ -49,8 +49,8 @@ public abstract class PatternProviderLogicMixin {
         var level = host.getBlockEntity().getLevel();
         if (level != null) {
             for (var stack : patternInventory) {
-                var expanded = TechStartPatternCompat.expand(stack, level);
-                if (expanded.isEmpty()) expanded = AggregatePatternExpander.expand(stack, level);
+                var expanded = AggregatePatternExpander.expand(stack, level);
+                if (expanded.isEmpty()) expanded = TechStartPatternCompat.expand(stack, level);
                 if (expanded.isEmpty()) {
                     var decoded = PatternDetailsHelper.decodePattern(stack, level);
                     if (decoded != null) patterns.add(decoded);
