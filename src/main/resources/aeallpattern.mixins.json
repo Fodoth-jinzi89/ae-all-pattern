@@ -15,6 +15,7 @@
     "PackagedAutoPackagingProviderBlockEntityMixin",
     "PackagedAutoPackagingProviderItemHandlerMixin",
     "ECOCraftingPatternBusBlockEntityMixin",
+    "MatrixPatternStorageBlockEntityMixin",
     "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"
   ],

@@ -33,10 +33,9 @@ public final class AggregatePatternDecoder implements IPatternDetailsDecoder {
         if (!isEncodedPattern(stack)) {
             return null;
         }
-        var expanded = AggregatePatternExpander.expand(stack, level);
-        if (!expanded.isEmpty()) {
-            return new AggregatePatternMarkerDetails(key, expanded.getFirst());
-        }
+        // Decoding happens synchronously while pattern inventories validate and rebuild.
+        // Never expand the aggregate here: large aggregates can contain thousands of recipes,
+        // and providers expand them at their catalog boundary immediately afterwards.
         ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
                 java.util.List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE))),
                 java.util.List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.STONE))));

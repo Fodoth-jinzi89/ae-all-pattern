@@ -314,15 +314,18 @@ public final class ClientJeiAggregateScanner {
     }
 
     private static Optional<AggregateInputSlot> chooseInputSlot(
-            IRecipeSlotView slot, int alternativeLimit, boolean chemicalOnly) {
+            IRecipeSlotView slot, int alternativeLimit, boolean preferChemical) {
         LinkedHashMap<String, GenericStack> unique = new LinkedHashMap<>();
-        slot.getAllIngredients()
+        List<GenericStack> converted = slot.getAllIngredients()
                 .map(ClientJeiAggregateScanner::toGenericStack)
                 .flatMap(Optional::stream)
                 .filter(stack -> stack.what() != null && stack.amount() > 0)
-                .filter(stack -> !chemicalOnly || isChemical(stack))
                 .sorted(Comparator.comparing(ClientJeiAggregateScanner::normalize))
                 .limit(AggregateInputSlot.MAX_ALTERNATIVES)
+                .toList();
+        boolean slotHasChemical = preferChemical && converted.stream().anyMatch(ClientJeiAggregateScanner::isChemical);
+        converted.stream()
+                .filter(stack -> !slotHasChemical || isChemical(stack))
                 .forEach(stack -> unique.putIfAbsent(normalize(stack), stack));
         if (unique.isEmpty()) {
             return Optional.empty();
