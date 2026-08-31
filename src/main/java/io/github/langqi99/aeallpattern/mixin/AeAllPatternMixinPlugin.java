@@ -24,6 +24,14 @@ public final class AeAllPatternMixinPlugin implements IMixinConfigPlugin {
         if (mixin.endsWith("MatrixPatternStorageBlockEntityMixin")) {
             return loaded("ae2lt");
         }
+        if (mixin.endsWith("ExtendedAeAssemblerMatrixFilterMixin")
+                || mixin.endsWith("ExtendedAeAssemblerMatrixPatternMixin")) {
+            return loaded("extendedae");
+        }
+        if (mixin.endsWith("ExtendedAePlusAssemblerMatrixFilterMixin")
+                || mixin.endsWith("ExtendedAePlusSuperAssemblerMatrixMixin")) {
+            return loaded("extendedae_plus");
+        }
         if (mixin.endsWith("AdvancedAlloyFurnaceAeManagerMixin")) {
             return loaded("useless_mod");
         }

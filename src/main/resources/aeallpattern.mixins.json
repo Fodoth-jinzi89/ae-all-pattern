@@ -15,6 +15,10 @@
     "PackagedAutoPackagingProviderBlockEntityMixin",
     "PackagedAutoPackagingProviderItemHandlerMixin",
     "ECOCraftingPatternBusBlockEntityMixin",
+    "ExtendedAeAssemblerMatrixFilterMixin",
+    "ExtendedAeAssemblerMatrixPatternMixin",
+    "ExtendedAePlusAssemblerMatrixFilterMixin",
+    "ExtendedAePlusSuperAssemblerMatrixMixin",
     "MatrixPatternStorageBlockEntityMixin",
     "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"
