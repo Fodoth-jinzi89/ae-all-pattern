@@ -65,11 +65,3 @@ reason="Adds AE chemical keys used by Mekanism gas and chemical aggregate patter
 versionRange="[1.6.0,2)"
 ordering="AFTER"
 side="BOTH"
-
-[[dependencies.${mod_id}]]
-modId="thunderbolt"
-type="optional"
-reason="Uses Thunderbolt 2 planning when available; the embedded legacy planner is disabled."
-versionRange="${thunderbolt_version_range}"
-ordering="AFTER"
-side="BOTH"
