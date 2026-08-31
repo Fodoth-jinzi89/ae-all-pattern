@@ -194,4 +194,58 @@ public record AggregateRecipe(
         }
         return count;
     }
+
+    /**
+     * Upper-bound estimate of this recipe's on-wire size (registry-friendly buffer), used to
+     * split client upload pages below the protocol packet limit regardless of recipe
+     * complexity. Deliberately conservative: it must never under-estimate.
+     */
+    public int encodedSizeEstimate() {
+        int size = utfSize(patternId);
+        size += resourceLocationSize(recipeId);
+        size += 1; // kind enum
+        size += varIntSize(inputSlots.size());
+        for (AggregateInputSlot slot : inputSlots) {
+            size += varIntSize(slot.alternatives().size());
+            for (GenericStack stack : slot.alternatives()) {
+                size += genericStackSize(stack);
+            }
+            size += 1; // item tag presence
+            if (slot.itemTag().isPresent()) {
+                size += resourceLocationSize(slot.itemTag().orElseThrow());
+            }
+        }
+        size += varIntSize(outputs.size());
+        for (GenericStack stack : outputs) {
+            size += genericStackSize(stack);
+        }
+        size += varIntSize(probabilisticOutputMask);
+        size += varIntSize(processingTicks);
+        return size;
+    }
+
+    private static int utfSize(String text) {
+        return varIntSize(text.length()) + text.length();
+    }
+
+    private static int resourceLocationSize(ResourceLocation id) {
+        return utfSize(id.getNamespace()) + utfSize(id.getPath());
+    }
+
+    private static int varIntSize(long value) {
+        int size = 1;
+        while (value >= 0x80) {
+            value >>>= 7;
+            size++;
+        }
+        return size;
+    }
+
+    private static int genericStackSize(GenericStack stack) {
+        appeng.api.stacks.AEKey key = stack.what();
+        // key type id + key id + a generous pad for AEItemKey components / NBT
+        // (unbounded in size) + amount varLong + count int.
+        return resourceLocationSize(key.getType().getId()) + resourceLocationSize(key.getId())
+                + 192 + varIntSize(stack.amount());
+    }
 }

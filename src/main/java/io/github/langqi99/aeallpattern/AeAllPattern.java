@@ -7,6 +7,7 @@ import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import io.github.langqi99.aeallpattern.registry.ModMenus;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternDecoder;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
 import io.github.langqi99.aeallpattern.recipe.RecipeIndexService;
 import io.github.langqi99.aeallpattern.network.BindingNetwork;
 import io.github.langqi99.aeallpattern.network.BindingSyncService;
@@ -23,6 +24,7 @@ import org.slf4j.Logger;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 @Mod(AeAllPattern.MOD_ID)
 public final class AeAllPattern {
@@ -46,6 +48,8 @@ public final class AeAllPattern {
         NeoForge.EVENT_BUS.addListener(AggregateMetadataSyncService::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(AggregateMetadataSyncService::onPlayerChangedDimension);
         NeoForge.EVENT_BUS.addListener(ModCommands::register);
+        NeoForge.EVENT_BUS.addListener(
+                (ServerTickEvent.Post event) -> AggregatePatternExpander.tickServer(event.getServer()));
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modBus.addListener(ClientEvents::registerScreens);
             modBus.addListener(ClientEvents::registerConfigScreen);

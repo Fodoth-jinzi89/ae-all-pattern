@@ -1,0 +1,103 @@
+package io.github.langqi99.aeallpattern.aggregate;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+
+/**
+ * Per-item publication selection for one aggregate pattern.
+ *
+ * <p>The component stores a compact ID list whose meaning depends on {@link #inverted()}:
+ * when {@code inverted == false} the IDs are <em>disabled</em> patterns (default: everything
+ * is published); when {@code inverted == true} the IDs are the only <em>enabled</em> patterns.
+ * That way both extremes ("all selected" and "nothing selected") stay tiny: selecting
+ * everything removes the component, deselecting everything is an inverted empty list.</p>
+ */
+public record AggregatePatternSelection(boolean inverted, List<String> ids) {
+    public static final int MAX_IDS = 16384;
+    public static final int MAX_ID_LENGTH = 160;
+
+    public static final AggregatePatternSelection ALL_ENABLED = new AggregatePatternSelection(false, List.of());
+    public static final AggregatePatternSelection NONE_ENABLED = new AggregatePatternSelection(true, List.of());
+
+    public static final Codec<AggregatePatternSelection> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+            Codec.BOOL.optionalFieldOf("inverted", false).forGetter(AggregatePatternSelection::inverted),
+            Codec.STRING.listOf().optionalFieldOf("ids", List.of()).forGetter(AggregatePatternSelection::ids)
+    ).apply(instance, AggregatePatternSelection::new));
+
+    public static final StreamCodec<RegistryFriendlyByteBuf, AggregatePatternSelection> STREAM_CODEC =
+            StreamCodec.of(AggregatePatternSelection::encode, AggregatePatternSelection::decode);
+
+    public AggregatePatternSelection {
+        if (ids == null) {
+            ids = List.of();
+        }
+        if (ids.size() > MAX_IDS) {
+            throw new IllegalArgumentException("aggregate pattern selection exceeds " + MAX_IDS + " ids");
+        }
+        LinkedHashSet<String> distinct = new LinkedHashSet<>(ids.size());
+        for (String id : ids) {
+            if (id == null || id.isBlank() || id.length() > MAX_ID_LENGTH) {
+                throw new IllegalArgumentException("invalid aggregate pattern selection id");
+            }
+            distinct.add(id);
+        }
+        ids = List.copyOf(distinct);
+    }
+
+    /** True when the aggregate should publish this child pattern. */
+    public boolean isEnabled(String patternId) {
+        return inverted == ids.contains(patternId);
+    }
+
+    /** True when every pattern is published; an absent component behaves the same way. */
+    public boolean isAllEnabled() {
+        return !inverted && ids.isEmpty();
+    }
+
+    /** True when nothing is published. */
+    public boolean isNoneEnabled() {
+        return inverted && ids.isEmpty();
+    }
+
+    /** Selection with the given pattern's publication state flipped. */
+    public AggregatePatternSelection toggled(String patternId) {
+        if (patternId == null || patternId.isBlank() || patternId.length() > MAX_ID_LENGTH) {
+            return this;
+        }
+        List<String> updated = new ArrayList<>(ids);
+        if (ids.contains(patternId)) {
+            updated.remove(patternId);
+        } else if (updated.size() < MAX_IDS) {
+            updated.add(patternId);
+        } else {
+            return this;
+        }
+        return new AggregatePatternSelection(inverted, updated);
+    }
+
+    private static void encode(RegistryFriendlyByteBuf buffer, AggregatePatternSelection selection) {
+        buffer.writeBoolean(selection.inverted);
+        buffer.writeVarInt(selection.ids.size());
+        for (String id : selection.ids) {
+            buffer.writeUtf(id, MAX_ID_LENGTH);
+        }
+    }
+
+    private static AggregatePatternSelection decode(RegistryFriendlyByteBuf buffer) {
+        boolean inverted = buffer.readBoolean();
+        int count = buffer.readVarInt();
+        if (count < 0 || count > MAX_IDS) {
+            throw new IllegalArgumentException("invalid aggregate pattern selection count: " + count);
+        }
+        List<String> ids = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            ids.add(buffer.readUtf(MAX_ID_LENGTH));
+        }
+        return new AggregatePatternSelection(inverted, ids);
+    }
+}

@@ -9,12 +9,6 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 public final class AeAllPatternMixinPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String target, String mixin) {
-        // Thunderbolt 2 provides the current planning/execution engine. Do not
-        // stack the embedded 1.0.6 CraftingCalculation hooks on top of it.
-        if (mixin.endsWith("TianshuCraftingCalculationMixin")
-                || mixin.endsWith("TianshuCraftingServiceMixin")) {
-            return !loaded("thunderbolt");
-        }
         if (mixin.endsWith("ClientJeiAggregateScannerMixin")) {
             return loaded("emi") && loaded("toomanyrecipeviewers");
         }
@@ -23,6 +17,16 @@ public final class AeAllPatternMixinPlugin implements IMixinConfigPlugin {
         }
         if (mixin.endsWith("MatrixPatternStorageBlockEntityMixin")) {
             return loaded("ae2lt");
+        }
+        if (mixin.endsWith("PigmeePatternProviderBlockEntityMixin")) {
+            return loaded("ae2lt");
+        }
+        if (mixin.endsWith("AdvPatternProviderLogicMixin")
+                || mixin.endsWith("AdvPatternEncoderMenuMixin")) {
+            return loaded("advanced_ae");
+        }
+        if (mixin.endsWith("StablePatternProviderLogicMixin")) {
+            return loaded("ae2ltpp");
         }
         if (mixin.endsWith("AdvancedAlloyFurnaceAeManagerMixin")) {
             return loaded("useless_mod");

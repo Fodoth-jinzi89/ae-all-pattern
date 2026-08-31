@@ -10,8 +10,6 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.menu.guisync.GuiSync;
 import appeng.menu.me.crafting.CraftConfirmMenu;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicyContext;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.ByproductPlanWarnings;
@@ -23,6 +21,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -105,7 +104,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
         }
     }
 
-    @WrapOperation(
+    @Redirect(
             method = "planJob",
             at = @At(
                     value = "INVOKE",
@@ -121,14 +120,13 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
             ICraftingSimulationRequester requester,
             AEKey what,
             long requestedAmount,
-            CalculationStrategy strategy,
-            Operation<Future<ICraftingPlan>> original) {
+            CalculationStrategy strategy) {
         if (!aeallpattern$routingAvailable) {
-            return original.call(service, level, requester, what, requestedAmount, strategy);
+            return service.beginCraftingCalculation(level, requester, what, requestedAmount, strategy);
         }
         return CraftingRoutePolicyContext.withPolicy(
                 aeallpattern$getRoutePolicy(),
-                () -> original.call(service, level, requester, what, requestedAmount, strategy));
+                () -> service.beginCraftingCalculation(level, requester, what, requestedAmount, strategy));
     }
 
     @Inject(method = "broadcastChanges", at = @At("TAIL"))

@@ -3,6 +3,7 @@ package io.github.langqi99.aeallpattern.mixin;
 import appeng.api.crafting.IPatternDetails;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
 import appeng.util.inv.AppEngInternalInventory;
+import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import java.util.List;
@@ -32,7 +33,34 @@ public abstract class ECOCraftingPatternBusBlockEntityMixin {
     private void addAggregatePatterns(CallbackInfo ci) {
         var level = ((BlockEntity) (Object) this).getLevel();
         if (level == null) return;
-        for (var stack : inventory) for (var pattern : AggregatePatternExpander.expand(stack, level))
-            if (pattern instanceof IMolecularAssemblerSupportedPattern) patternDetails.add(pattern);
+        boolean cold = false;
+        for (var stack : inventory) {
+            var expanded = AggregatePatternExpander.expandScheduled(
+                    stack, level, this::aeallpattern$rerunUpdatePatternDetails);
+            if (expanded.isEmpty()) {
+                cold = true;
+            }
+            for (var pattern : expanded) {
+                if (pattern instanceof IMolecularAssemblerSupportedPattern) {
+                    patternDetails.add(pattern);
+                }
+            }
+        }
+        if (cold) {
+            AeAllPattern.LOGGER.debug("ECO pattern bus: scheduled aggregate expansion pending");
+        }
+    }
+
+    /** Re-runs the host refresh once the scheduled aggregate expansion completed. */
+    @org.spongepowered.asm.mixin.Unique
+    private void aeallpattern$rerunUpdatePatternDetails() {
+        try {
+            java.lang.reflect.Method method = ((Object) this).getClass()
+                    .getDeclaredMethod("updatePatternDetails");
+            method.setAccessible(true);
+            method.invoke(this);
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            AeAllPattern.LOGGER.debug("Could not re-run ECO pattern bus updatePatternDetails", error);
+        }
     }
 }

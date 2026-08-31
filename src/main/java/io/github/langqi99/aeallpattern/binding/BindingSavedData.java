@@ -35,6 +35,13 @@ public final class BindingSavedData extends SavedData {
         return List.copyOf(bindings.values());
     }
 
+    /** Bindings anchored at the given global position, in insertion order. */
+    public List<BindingRecord> byAnchor(GlobalPos anchor) {
+        return bindings.values().stream()
+                .filter(record -> record.anchor().equals(anchor))
+                .toList();
+    }
+
     public Optional<BindingRecord> find(UUID bindingId) {
         return Optional.ofNullable(bindings.get(bindingId));
     }

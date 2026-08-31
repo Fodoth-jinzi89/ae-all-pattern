@@ -79,14 +79,7 @@ public abstract class TianshuCraftingCalculationMixin implements TianshuFastCraf
             long amount,
             CallbackInfoReturnable<CraftingPlan> cir) {
         CraftingRoutePolicy policy = aeallpattern$routePolicy;
-        // The embedded 1.0.6 planner only models item-key execution.  In
-        // particular, processing patterns that produce Mekanism/AppMek
-        // chemicals must stay on AE2's native calculation path: its plan
-        // preserves the real processing-pattern input holders, allowing the
-        // provider to push item inputs into the machine.  Thunderbolt 2
-        // handles these non-item outputs in its newer candidate engine; do
-        // not let the legacy copy claim them here.
-        if (policy == null || !(output instanceof appeng.api.stacks.AEItemKey)) {
+        if (policy == null) {
             return;
         }
         if (simulation && amount == requestedAmount && aeallpattern$cachedSimulationPlan != null) {

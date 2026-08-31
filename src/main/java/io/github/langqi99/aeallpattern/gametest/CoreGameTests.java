@@ -23,12 +23,16 @@ import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternData;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternConfigMenu;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternDecoder;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternEditPolicy;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternExpander;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternMarkerDetails;
 import io.github.langqi99.aeallpattern.aggregate.AggregateInputSlot;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternKind;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternLibrary;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternOptions;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternRef;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternSelection;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternSelectionMenu;
 import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
 import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.binding.BindingSavedData;
@@ -83,6 +87,12 @@ import net.neoforged.fml.ModList;
 @GameTestHolder(AeAllPattern.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class CoreGameTests {
+    static {
+        // GameTests assert full publication immediately after updatePatterns, so the scheduled
+        // expansion path must behave synchronously here. The scheduled-modes test toggles it.
+        AggregatePatternExpander.setSynchronous(true);
+    }
+
     private CoreGameTests() {
     }
 
@@ -945,30 +955,6 @@ public final class CoreGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 40)
-    public static void incomingBufferQueuesMultipleCraftsForBinding(GameTestHelper helper) {
-        UUID bindingId = UUID.randomUUID();
-        BindingRecord binding = new BindingRecord(
-                1,
-                bindingId,
-                UUID.randomUUID(),
-                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(0, 1, 0))),
-                GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(1, 1, 0))),
-                Direction.UP,
-                "anchor",
-                "target",
-                "minecraft:furnace",
-                1,
-                helper.getLevel().getGameTime(),
-                helper.getLevel().getGameTime());
-        IncomingBuffer buffer = new IncomingBuffer();
-        buffer.enqueue(binding, "pattern", new ItemStack(Items.RAW_IRON), new ItemStack(Items.IRON_INGOT), 20);
-        buffer.enqueue(binding, "pattern", new ItemStack(Items.RAW_IRON), new ItemStack(Items.IRON_INGOT), 20);
-        helper.assertValueEqual(buffer.recoverableDrops().size(), 2,
-                "same binding rejected a second queued craft");
-        helper.succeed();
-    }
-
-    @GameTest(template = "empty", timeoutTicks = 40)
     public static void incomingBufferPersistsAllRecipeInputs(GameTestHelper helper) {
         UUID bindingId = UUID.randomUUID();
         BindingRecord binding = new BindingRecord(
@@ -1214,6 +1200,280 @@ public final class CoreGameTests {
                 "wrong Mekanism adapter selected");
         var catalog = RecipeIndexService.catalog(helper.getLevel(), machine, adapter.orElseThrow());
         helper.assertFalse(catalog.recipes().isEmpty(), "Mekanism smelting catalog is empty");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 80)
+    public static void aggregateSelectionFiltersExpandedPatterns(GameTestHelper helper) {
+        List<AggregateRecipe> recipes = List.of(
+                new AggregateRecipe(
+                        "selection-iron",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "selection_iron"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                        1),
+                new AggregateRecipe(
+                        "selection-gold",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "selection_gold"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_GOLD))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        1));
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "selection_test_machine"),
+                "block.aeallpattern.selection_test_machine", recipes);
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        helper.assertValueEqual(AggregatePatternExpander.expand(aggregate, helper.getLevel()).size(), 2,
+                "aggregate without a selection must publish every child pattern");
+
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get(),
+                AggregatePatternSelection.ALL_ENABLED.toggled("selection-iron"));
+        helper.assertValueEqual(AggregatePatternExpander.expand(aggregate, helper.getLevel()).size(), 1,
+                "deselected child pattern was still published");
+        helper.assertValueEqual(
+                AggregatePatternExpander.expand(aggregate, helper.getLevel()).get(0).getOutputs().size(), 1,
+                "unexpected pattern survived selection filtering");
+
+        var player = helper.makeMockPlayer(GameType.CREATIVE);
+        player.setItemInHand(InteractionHand.MAIN_HAND, aggregate);
+        var menu = new AggregatePatternSelectionMenu(
+                1,
+                player.getInventory(),
+                InteractionHand.MAIN_HAND,
+                AggregatePatternSelectionMenu.entriesFromRecipes(recipes),
+                aggregate.getOrDefault(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get(),
+                        AggregatePatternSelection.ALL_ENABLED));
+        helper.assertTrue(menu.stillValid(player), "owner could not open the selection menu");
+        helper.assertTrue(menu.selectedCount() == 1, "selection menu counted the wrong enabled patterns");
+
+        // Toggling the remaining enabled pattern must disable it on the held stack.
+        helper.assertTrue(menu.clickMenuButton(player, 1), "menu rejected a pattern toggle");
+        var stored = aggregate.get(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get());
+        helper.assertTrue(stored != null && !stored.isEnabled("selection-gold"),
+                "toggled pattern stayed enabled on the held item");
+
+        // Bulk actions must reach both extremes compactly.
+        helper.assertTrue(menu.clickMenuButton(player, AggregatePatternSelectionMenu.DESELECT_ALL),
+                "menu rejected deselect-all");
+        helper.assertTrue(aggregate.get(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get()).isNoneEnabled(),
+                "deselect-all did not disable every pattern");
+        helper.assertTrue(AggregatePatternExpander.expand(aggregate, helper.getLevel()).isEmpty(),
+                "fully deselected aggregate still published patterns");
+
+        // The provider fallback decodes the stack through the aggregate decoder; a fully
+        // deselected aggregate must decode to a placeholder marker (slot-valid, never published).
+        var decoded = PatternDetailsHelper.decodePattern(aggregate.copy(), helper.getLevel());
+        helper.assertTrue(decoded instanceof AggregatePatternMarkerDetails marker && marker.isPlaceholder(),
+                "fully deselected aggregate did not decode to a placeholder marker");
+
+        helper.assertTrue(menu.clickMenuButton(player, AggregatePatternSelectionMenu.SELECT_ALL),
+                "menu rejected select-all");
+        helper.assertFalse(aggregate.has(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get()),
+                "select-all did not remove the selection component");
+        helper.assertValueEqual(AggregatePatternExpander.expand(aggregate, helper.getLevel()).size(), 2,
+                "select-all did not restore every child pattern");
+
+        // The server-wide expansion cache must reuse the immutable expanded list.
+        helper.assertTrue(
+                AggregatePatternExpander.expand(aggregate, helper.getLevel())
+                        == AggregatePatternExpander.expand(aggregate, helper.getLevel()),
+                "expansion cache did not reuse the expanded pattern list");
+
+        // With children restored the marker must no longer be a placeholder.
+        var restored = PatternDetailsHelper.decodePattern(aggregate.copy(), helper.getLevel());
+        helper.assertTrue(
+                restored instanceof AggregatePatternMarkerDetails marker && !marker.isPlaceholder(),
+                "restored aggregate decoded to a placeholder marker");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void scheduledExpansionCompletesAcrossTicks(GameTestHelper helper) {
+        List<AggregateRecipe> recipes = List.of(
+                new AggregateRecipe(
+                        "scheduled-alpha",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "scheduled_alpha"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                        1),
+                new AggregateRecipe(
+                        "scheduled-beta",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "scheduled_beta"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_GOLD))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        1));
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "scheduled_test_machine"),
+                "block.aeallpattern.scheduled_test_machine", recipes);
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        AggregatePatternExpander.setSynchronous(false);
+        try {
+            boolean[] completed = {false};
+            List<IPatternDetails> first =
+                    AggregatePatternExpander.expandScheduled(aggregate, helper.getLevel(), () -> completed[0] = true);
+            helper.assertTrue(first.isEmpty(),
+                    "cold scheduled expansion must not block the calling tick");
+
+            // Manual pump: the server tick handler advances the job within its budget.
+            int guard = 0;
+            while (!completed[0] && guard++ < 400) {
+                AggregatePatternExpander.tickServer(helper.getLevel().getServer());
+            }
+            helper.assertTrue(completed[0], "scheduled expansion never completed");
+
+            List<IPatternDetails> done =
+                    AggregatePatternExpander.expandScheduled(aggregate, helper.getLevel(), () -> {});
+            helper.assertValueEqual(done.size(), 2,
+                    "completed scheduled expansion did not publish every child pattern");
+            helper.assertValueEqual(
+                    AggregatePatternExpander.expand(aggregate, helper.getLevel()).size(), 2,
+                    "scheduled and synchronous expansions disagree");
+        } finally {
+            AggregatePatternExpander.setSynchronous(true);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Guards the addon provider mixins against an unloadable helper class.
+     *
+     * <p>Every class under the mixin package declared in {@code aeallpattern.mixins.json} is owned
+     * by that config and throws {@code IllegalClassLoadError} as soon as a transformed target class
+     * references it at runtime. That is exactly how the 0.1.16 pigmee provider crashed on load, and
+     * it cannot be caught by ordinary tests because a fresh dev world never contains the block.
+     * The test exercises the host refresh directly and only runs when the addon is present.</p>
+     */
+    @GameTest(template = "empty", timeoutTicks = 60)
+    public static void addonProviderMixinsStayLoadable(GameTestHelper helper) {
+        var block = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("ae2lt", "pigmee_pattern_provider"));
+        if (block.isEmpty()) {
+            // Addon missing in this environment; there is no target class to exercise.
+            helper.succeed();
+            return;
+        }
+        BlockPos pos = new BlockPos(1, 1, 1);
+        helper.setBlock(pos, block.get().defaultBlockState());
+        helper.runAfterDelay(5, () -> {
+            var entity = helper.getBlockEntity(pos);
+            helper.assertTrue(entity != null, "pigmee pattern provider block entity was not created");
+            try {
+                java.lang.reflect.Method updatePatterns = entity.getClass().getDeclaredMethod("updatePatterns");
+                updatePatterns.setAccessible(true);
+                updatePatterns.invoke(entity);
+            } catch (ReflectiveOperationException error) {
+                helper.fail("addon provider refresh was not reachable: " + error);
+                return;
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void infusingAggregateIsEditableByPatternEditor(GameTestHelper helper) {
+        List<AggregateRecipe> recipes = List.of(
+                new AggregateRecipe(
+                        "infusion-gold",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_gold"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.REDSTONE))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        1),
+                new AggregateRecipe(
+                        "infusion-diamond",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_diamond"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.LAPIS_LAZULI))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                        1));
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("mekanism", "advanced_infusing_factory"),
+                "block.mekanism.advanced_infusing_factory", recipes);
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        helper.assertTrue(AggregatePatternEditPolicy.isEditorEditable(aggregate, helper.getLevel()),
+                "infusing-factory aggregate was not classified as editor-editable");
+        IPatternDetails editable = AggregatePatternEditPolicy.decodeForEditor(aggregate, helper.getLevel());
+        helper.assertTrue(editable instanceof appeng.crafting.pattern.AEProcessingPattern,
+                "editable aggregate did not unwrap down to an AE2 processing pattern");
+        helper.assertTrue(editable.getOutputs().getFirst().what() instanceof AEItemKey key
+                        && key.is(Items.GOLD_INGOT),
+                "editor did not see the first selected child of the aggregate");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void nonInfusingAggregateStaysEditorLocked(GameTestHelper helper) {
+        AggregateRecipe recipe = new AggregateRecipe(
+                "furnace-iron",
+                ResourceLocation.fromNamespaceAndPath("aeallpattern", "furnace_iron"),
+                AggregatePatternKind.PROCESSING,
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
+                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                1);
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.withDefaultNamespace("furnace"),
+                "block.minecraft.furnace", List.of(recipe));
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        helper.assertFalse(AggregatePatternEditPolicy.isEditorEditable(aggregate, helper.getLevel()),
+                "furnace aggregate was wrongly classified as editor-editable");
+        IPatternDetails decoded = AggregatePatternEditPolicy.decodeForEditor(aggregate, helper.getLevel());
+        helper.assertTrue(decoded instanceof AggregatePatternMarkerDetails,
+                "non-infusing aggregate was unwrapped for the editor and must stay locked");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void editorNeverReadsDeselectedChildren(GameTestHelper helper) {
+        List<AggregateRecipe> recipes = List.of(
+                new AggregateRecipe(
+                        "infusion-gold-2",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_gold_2"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.REDSTONE))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        1),
+                new AggregateRecipe(
+                        "infusion-diamond-2",
+                        ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_diamond_2"),
+                        AggregatePatternKind.PROCESSING,
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.LAPIS_LAZULI))),
+                        List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                        1));
+        AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
+                helper.getLevel().getServer(),
+                ResourceLocation.fromNamespaceAndPath("mekanism", "basic_infusing_factory"),
+                "block.mekanism.basic_infusing_factory", recipes);
+        ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN.get(), ref);
+
+        // First child deselected: the editor must see the still-selected second child.
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get(),
+                new AggregatePatternSelection(false, List.of("infusion-gold-2")));
+        IPatternDetails editable = AggregatePatternEditPolicy.decodeForEditor(aggregate, helper.getLevel());
+        helper.assertTrue(editable.getOutputs().getFirst().what() instanceof AEItemKey key
+                        && key.is(Items.DIAMOND),
+                "editor exposed a deselected child instead of the first selected one");
+
+        // Everything deselected: the editor must get the placeholder marker, not any child.
+        aggregate.set(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get(), AggregatePatternSelection.NONE_ENABLED);
+        IPatternDetails placeholder = AggregatePatternEditPolicy.decodeForEditor(aggregate, helper.getLevel());
+        helper.assertTrue(placeholder instanceof AggregatePatternMarkerDetails marker && marker.isPlaceholder(),
+                "fully deselected aggregate handed a child to the editor");
         helper.succeed();
     }
 

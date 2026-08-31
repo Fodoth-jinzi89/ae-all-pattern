@@ -51,6 +51,14 @@ ordering="AFTER"
 side="BOTH"
 
 [[dependencies.${mod_id}]]
+modId="jei"
+type="optional"
+reason="Provides universal recipe discovery for aggregate patterns."
+versionRange="[19.19,20)"
+ordering="AFTER"
+side="CLIENT"
+
+[[dependencies.${mod_id}]]
 modId="ae2jeiintegration"
 type="optional"
 reason="Converts JEI ingredient types into AE generic stack keys."
