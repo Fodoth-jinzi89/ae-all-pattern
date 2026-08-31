@@ -24,6 +24,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Grid-style picker for the child patterns inside one aggregate pattern item. Each pattern
@@ -355,7 +356,7 @@ public final class AggregatePatternSelectionScreen extends AbstractContainerScre
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
         List<Integer> order = sortedIndices();
         renderGrid(graphics, mouseX, mouseY, order);

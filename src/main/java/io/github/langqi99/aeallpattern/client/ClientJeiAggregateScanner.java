@@ -3,6 +3,7 @@ package io.github.langqi99.aeallpattern.client;
 import appeng.api.stacks.GenericStack;
 import appeng.api.stacks.AEItemKey;
 import appeng.core.definitions.AEBlocks;
+import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternData;
 import io.github.langqi99.aeallpattern.aggregate.AggregateInputSlot;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternKind;
@@ -49,6 +50,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.fml.ModList;
+import org.jetbrains.annotations.NotNull;
 import tamaized.ae2jeiintegration.api.integrations.jei.IngredientConverter;
 import tamaized.ae2jeiintegration.api.integrations.jei.IngredientConverters;
 
@@ -119,7 +121,7 @@ public final class ClientJeiAggregateScanner {
             activeJob = null;
             return;
         }
-        if (job.step(SCAN_BUDGET_NANOS)) {
+        if (job.step()) {
             activeJob = null;
             job.finish();
         }
@@ -390,6 +392,15 @@ public final class ClientJeiAggregateScanner {
         UUID uploadId = UUID.randomUUID();
         // Split by estimated bytes so a page never exceeds the protocol packet limit,
         // and never by a fixed recipe count alone.
+        List<List<AggregateRecipe>> pages = createPages(recipes);
+        for (int pageIndex = 0; pageIndex < pages.size(); pageIndex++) {
+            PacketDistributor.sendToServer(new GenerateAggregatePayload(
+                    uploadId, pos, catalystId, machineKey, pageIndex, pages.size(),
+                    recipes.size(), pages.get(pageIndex)));
+        }
+    }
+
+    private static @NotNull List<List<AggregateRecipe>> createPages(List<AggregateRecipe> recipes) {
         List<List<AggregateRecipe>> pages = new ArrayList<>();
         List<AggregateRecipe> current = new ArrayList<>();
         int currentBytes = 0;
@@ -408,14 +419,11 @@ public final class ClientJeiAggregateScanner {
         if (!current.isEmpty()) {
             pages.add(current);
         }
-        for (int pageIndex = 0; pageIndex < pages.size(); pageIndex++) {
-            PacketDistributor.sendToServer(new GenerateAggregatePayload(
-                    uploadId, pos, catalystId, machineKey, pageIndex, pages.size(),
-                    recipes.size(), pages.get(pageIndex)));
-        }
+        return pages;
     }
 
     /** Resumable scan of one JEI category, one recipe per loop iteration. */
+    @SuppressWarnings("rawtypes")
     private static final class ScanJob {
         private final IJeiRuntime runtime;
         private final IRecipeCategory category;
@@ -454,8 +462,8 @@ public final class ClientJeiAggregateScanner {
         }
 
         /** Processes recipes until the time budget is spent; true when the scan is complete. */
-        boolean step(long budgetNanos) {
-            long deadline = System.nanoTime() + budgetNanos;
+        boolean step() {
+            long deadline = System.nanoTime() + ClientJeiAggregateScanner.SCAN_BUDGET_NANOS;
             while (index < categoryRecipes.size() && destination.size() < MAX_RECIPES) {
                 try {
                     scanOne(categoryRecipes.get(index), index);
@@ -486,7 +494,7 @@ public final class ClientJeiAggregateScanner {
             upload(destination, pos, machineKey, catalystId);
         }
 
-        @SuppressWarnings({"rawtypes", "unchecked"})
+        @SuppressWarnings({"unchecked"})
         private void scanOne(Object recipe, int position) {
             IRecipeManager manager = runtime.getRecipeManager();
             var drawable = manager.createRecipeLayoutDrawable(category, recipe, emptyFocus);
@@ -517,8 +525,7 @@ public final class ClientJeiAggregateScanner {
                     .limit(AggregateRecipe.MAX_OUTPUTS)
                     .toList();
             List<GenericStack> outputs = scannedOutputs.stream().map(ScannedOutput::stack).toList();
-            if (!valid || inputSlots.isEmpty() || outputs.isEmpty()
-                    || inputSlots.size() > AggregateRecipe.MAX_INPUTS) {
+            if (inputSlots.isEmpty() || outputs.isEmpty() || inputSlots.size() > AggregateRecipe.MAX_INPUTS) {
                 return;
             }
 
@@ -625,13 +632,10 @@ public final class ClientJeiAggregateScanner {
         var exact = categoryIds.stream()
                 .filter(id -> id.getPath().contains(keyword))
                 .findFirst();
-        if (exact.isPresent()) {
-            return exact.get();
-        }
-        return categoryIds.stream()
+        return exact.orElseGet(() -> categoryIds.stream()
                 .filter(id -> commonPrefixLength(id.getPath(), keyword) >= MIN_SHARED_PREFIX)
                 .max(Comparator.comparingInt(id -> commonPrefixLength(id.getPath(), keyword)))
-                .orElse(null);
+                .orElse(null));
     }
 
     /** Strips tier prefixes and housing suffixes: {@code advanced_infusing_factory} -> {@code infusing}. */
@@ -665,9 +669,7 @@ public final class ClientJeiAggregateScanner {
         return slot.getAllIngredients()
                 .map(ClientJeiAggregateScanner::toGenericStack)
                 .flatMap(Optional::stream)
-                .filter(stack -> stack.what() != null && stack.amount() > 0)
-                .sorted(Comparator.comparing(ClientJeiAggregateScanner::normalize))
-                .findFirst();
+                .filter(stack -> stack.what() != null && stack.amount() > 0).min(Comparator.comparing(ClientJeiAggregateScanner::normalize));
     }
 
     private static Optional<ScannedOutput> scanOutput(IRecipeSlotView slot, AggregatePatternKind kind) {
@@ -691,6 +693,7 @@ public final class ClientJeiAggregateScanner {
      * deliberately skipping the first tooltip line (the ingredient name) to avoid treating an item
      * whose own name contains "chance" as a probabilistic output.
      */
+    @SuppressWarnings("removal")
     private static boolean isProbabilistic(IRecipeSlotView slot) {
         if (slot.getSlotName().map(ClientJeiAggregateScanner::containsProbabilityMarker).orElse(false)) {
             return true;
@@ -708,7 +711,7 @@ public final class ClientJeiAggregateScanner {
                 }
             }
         } catch (RuntimeException error) {
-            io.github.langqi99.aeallpattern.AeAllPattern.LOGGER.debug(
+            AeAllPattern.LOGGER.debug(
                     "JEI output tooltip rejected probability inspection", error);
         }
         return false;
@@ -781,10 +784,8 @@ public final class ClientJeiAggregateScanner {
                         .map(named -> named.size() == candidateItems.size()
                                 && named.stream().allMatch(holder -> candidateItems.contains(holder.value())))
                         .orElse(false))
-                .map(net.minecraft.tags.TagKey::location)
-                .sorted(Comparator.comparingInt((ResourceLocation id) -> id.toString().length())
-                        .thenComparing(ResourceLocation::toString))
-                .findFirst();
+                .map(net.minecraft.tags.TagKey::location).min(Comparator.comparingInt((ResourceLocation id) -> id.toString().length())
+                        .thenComparing(ResourceLocation::toString));
         ITEM_TAG_CACHE.put(candidateItems, result);
         return result;
     }
@@ -792,10 +793,10 @@ public final class ClientJeiAggregateScanner {
     private static Optional<GenericStack> toGenericStack(ITypedIngredient<?> typed) {
         Object ingredient = typed.getIngredient();
         if (ingredient instanceof ItemStack item && !item.isEmpty()) {
-            return Optional.of(GenericStack.fromItemStack(item.copy()));
+            return Optional.ofNullable(GenericStack.fromItemStack(item.copy()));
         }
         if (ingredient instanceof FluidStack fluid && !fluid.isEmpty()) {
-            return Optional.of(GenericStack.fromFluidStack(fluid.copy()));
+            return Optional.ofNullable(GenericStack.fromFluidStack(fluid.copy()));
         }
         return convertRegistered(typed);
     }

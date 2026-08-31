@@ -15,6 +15,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+import org.jetbrains.annotations.NotNull;
 
 /** Server-wide binding store, physically saved in the overworld data directory. */
 public final class BindingSavedData extends SavedData {
@@ -74,7 +75,7 @@ public final class BindingSavedData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    public @NotNull CompoundTag save(CompoundTag tag, HolderLookup.@NotNull Provider registries) {
         ListTag bindingTags = new ListTag();
         bindings.values().stream()
                 .sorted((left, right) -> left.bindingId().compareTo(right.bindingId()))

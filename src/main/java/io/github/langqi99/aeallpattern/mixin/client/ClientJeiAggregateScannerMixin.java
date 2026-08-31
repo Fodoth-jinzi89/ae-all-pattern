@@ -50,7 +50,7 @@ public abstract class ClientJeiAggregateScannerMixin {
     }
 
     @WrapOperation(method = "onRightClickBlock", at = @At(value = "INVOKE",
-            target = "Lio/github/langqi99/aeallpattern/client/ClientJeiAggregateScanner;scan(Lmezz/jei/api/runtime/IJeiRuntime;Lnet/minecraft/core/BlockPos;)V"))
+            target = "Lio/github/langqi99/aeallpattern/client/ClientJeiAggregateScanner;startScan(Lmezz/jei/api/runtime/IJeiRuntime;Lnet/minecraft/core/BlockPos;)V"))
     private static void preferEmi(IJeiRuntime runtime, BlockPos pos, Operation<Void> original) {
         if (ModList.get().isLoaded("toomanyrecipeviewers")) {
             try { if (EmiAggregateScanner.scan(pos)) return; } catch (RuntimeException ignored) {}

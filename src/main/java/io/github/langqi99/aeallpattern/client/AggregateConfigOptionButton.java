@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.NotNull;
 
 /** Compact AE-style boolean row used by the aggregate-pattern configuration screen. */
 public final class AggregateConfigOptionButton extends AbstractWidget {
@@ -54,7 +55,7 @@ public final class AggregateConfigOptionButton extends AbstractWidget {
     }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    protected void updateWidgetNarration(net.minecraft.client.gui.narration.@NotNull NarrationElementOutput output) {
         defaultButtonNarrationText(output);
     }
 }
