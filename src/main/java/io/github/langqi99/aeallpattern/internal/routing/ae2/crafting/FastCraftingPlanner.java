@@ -1,18 +1,6 @@
 package io.github.langqi99.aeallpattern.internal.routing.ae2.crafting;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -189,13 +177,12 @@ public final class FastCraftingPlanner {
                                          long amount,
                                          boolean simulate,
                                          @Nullable ReservedStockCraftingRequester reservedStock,
-                                         @Nullable CraftingRoutePolicy routePolicy) {
+                                         @Nullable CraftingRoutePolicy effectivePolicy) {
         if (amount <= 0) {
             return FastAttempt.decline();
         }
         // null is intentional: it selects the imported planner's unmodified base ordering.
         // A policy is present only for an order explicitly claimed by a Tianshu router.
-        CraftingRoutePolicy effectivePolicy = routePolicy;
 
         // Snapshot inventory the same way AE2 does: a child view that ignores the requested output
         // (existing output stock is never consumed; the full amount is always crafted).
@@ -417,8 +404,7 @@ public final class FastCraftingPlanner {
                 List<List<SlotChoice>> slotOptions = new ArrayList<>(inputs.length);
                 long combos = 1;
                 boolean patternUnsatisfiable = false;
-                for (int slot = 0; slot < inputs.length; slot++) {
-                    IPatternDetails.IInput in = inputs[slot];
+                for (IPatternDetails.IInput in : inputs) {
                     // Durability tool slot: collapse the degradation chain to one finite-use token.
                     ChainLookup lookup = durabilityChain(in, craftingService, snapshot, level, builder,
                             durability, linkOwner, itemUnitKeys, conservativeDurabilityItems,
@@ -500,7 +486,7 @@ public final class FastCraftingPlanner {
                     if (opts.size() > 1) {
                         for (CraftInput<AEKey> o : opts) {
                             availability.computeIfAbsent(o.key(),
-                                k -> usableStock(snapshot, k, reservedStock));
+                                    k -> usableStock(snapshot, k, reservedStock));
                         }
                         opts.sort((a, b) -> compareSubstituteAvailability(
                                 availability.get(a.key()), availability.get(b.key()),
@@ -573,7 +559,7 @@ public final class FastCraftingPlanner {
         LinkedHashMap<AEKey, GenericStack> byKey = new LinkedHashMap<>();
         for (GenericStack template : possible) {
             byKey.putIfAbsent(template.what(), template);
-            for (AEKey fuzzy : snapshot.findFuzzyTemplates(template.what())) {
+            for (AEKey fuzzy : Objects.requireNonNull(snapshot.findFuzzyTemplates(template.what()))) {
                 byKey.putIfAbsent(fuzzy, new GenericStack(fuzzy, template.amount()));
             }
             for (AEKey craftable : craftableSameIdVariants(
@@ -629,7 +615,7 @@ public final class FastCraftingPlanner {
                     && craftable.getItem() == item) {
                 byKey.putIfAbsent(craftable, new GenericStack(craftable, possible.amount()));
             }
-            for (AEKey variant : snapshot.findFuzzyTemplates(template)) {
+            for (AEKey variant : Objects.requireNonNull(snapshot.findFuzzyTemplates(template))) {
                 if (variant instanceof AEItemKey itemVariant
                         && itemVariant.getItem() == item
                         && in.isValid(variant, level)) {
@@ -775,6 +761,7 @@ public final class FastCraftingPlanner {
         return new ChainLookup(chain, null);
     }
 
+    @SuppressWarnings("MathClampMigration")
     private static long usableStock(
             ChildCraftingSimulationState snapshot,
             AEKey key,
@@ -784,7 +771,7 @@ public final class FastCraftingPlanner {
         if (reservedStock.groupsSecondaryVariants(key)) {
             var group = new LinkedHashMap<AEKey, Long>();
             group.put(key, actual);
-            for (AEKey variant : snapshot.findFuzzyTemplates(key)) {
+            for (AEKey variant : Objects.requireNonNull(snapshot.findFuzzyTemplates(key))) {
                 if (!key.dropSecondary().equals(variant.dropSecondary())) continue;
                 long amount = Math.max(0L,
                         snapshot.extract(variant, Long.MAX_VALUE, Actionable.SIMULATE));
@@ -821,7 +808,7 @@ public final class FastCraftingPlanner {
         }
         AEItemKey anchor = template;
         long best = downwardLength(in, template, item, level);
-        for (AEKey variant : snapshot.findFuzzyTemplates(template)) {
+        for (AEKey variant : Objects.requireNonNull(snapshot.findFuzzyTemplates(template))) {
             if (!(variant instanceof AEItemKey ik) || ik.getItem() != item || ik.equals(anchor)
                     || !in.isValid(ik, level)) {
                 continue;
@@ -945,7 +932,7 @@ public final class FastCraftingPlanner {
             int stockSurplusPreference) {
         long units = Math.max(1, multiplier);
         if (options.size() == 1) {
-            return List.of(new SlotChoice(List.of(scaleInput(options.get(0), units))));
+            return List.of(new SlotChoice(List.of(scaleInput(options.getFirst(), units))));
         }
 
         int limit = (int) FUZZY_NONCYCLE_STEPS;

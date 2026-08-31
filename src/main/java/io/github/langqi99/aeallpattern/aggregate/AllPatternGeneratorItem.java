@@ -20,6 +20,7 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.fml.ModList;
+import org.jetbrains.annotations.NotNull;
 
 /** Captures all deterministic recipes exposed by one supported machine. */
 public final class AllPatternGeneratorItem extends Item {
@@ -28,7 +29,7 @@ public final class AllPatternGeneratorItem extends Item {
     }
 
     @Override
-    public InteractionResult useOn(UseOnContext context) {
+    public @NotNull InteractionResult useOn(UseOnContext context) {
         Player player = context.getPlayer();
         if (player == null) {
             return InteractionResult.FAIL;
@@ -90,7 +91,7 @@ public final class AllPatternGeneratorItem extends Item {
 
     @Override
     public void appendHoverText(
-            ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+            @NotNull ItemStack stack, @NotNull TooltipContext context, @NotNull List<Component> tooltip, @NotNull TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
         tooltip.add(Component.translatable("tooltip.aeallpattern.generator.usage"));
     }

@@ -9,9 +9,9 @@ public final class ReusableStockFallback {
     public static long supplementalSelfSeedStock(
             long required, long seedSnapshotAmount, long ordinaryVisibleAmount) {
         long positiveRequired = Math.max(0L, required);
-        long available = Math.min(positiveRequired, Math.max(0L, seedSnapshotAmount));
-        long ordinaryVisible = Math.min(
-                positiveRequired, Math.max(0L, ordinaryVisibleAmount));
+        long available = Math.clamp(seedSnapshotAmount, 0L, positiveRequired);
+        long ordinaryVisible = Math.clamp(ordinaryVisibleAmount, 0L,
+                positiveRequired);
         return Math.max(0L, available - ordinaryVisible);
     }
 

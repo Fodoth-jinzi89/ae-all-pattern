@@ -1,6 +1,8 @@
 package io.github.langqi99.aeallpattern.network;
 
 import io.github.langqi99.aeallpattern.client.ClientBindingState;
+import io.github.langqi99.aeallpattern.aggregate.AggregateMetadataView;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 public final class BindingNetwork {
@@ -17,7 +19,7 @@ public final class BindingNetwork {
                 AggregateMetadataPayload.TYPE,
                 AggregateMetadataPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
-                        io.github.langqi99.aeallpattern.aggregate.AggregateMetadataView.replace(payload.entries())));
+                        AggregateMetadataView.replace(payload.entries())));
         registrar.playToServer(
                 GenerateAggregatePayload.TYPE,
                 GenerateAggregatePayload.STREAM_CODEC,

@@ -10,6 +10,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Collections;
+import java.util.Objects;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,6 +22,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 
 /** Validates and assembles bounded JEI scan pages before updating the server library. */
+@SuppressWarnings("deprecation")
 public final class AggregateGenerationService {
     private static final long UPLOAD_TIMEOUT_TICKS = 20L * 120L;
     private static final Map<UploadKey, Upload> UPLOADS = new HashMap<>();
@@ -46,7 +51,7 @@ public final class AggregateGenerationService {
         if (recipes.size() != payload.totalRecipeCount()) {
             return;
         }
-        var library = AggregatePatternLibrary.get(player.getServer());
+        var library = AggregatePatternLibrary.get(Objects.requireNonNull(player.getServer()));
         var ref = library.put(
                 player.getServer(), payload.catalystId(), payload.machineTranslationKey(), recipes);
         AggregateMetadataSyncService.sendToOnlinePlayers(player.getServer());
@@ -95,8 +100,8 @@ public final class AggregateGenerationService {
     }
 
     private static final class Upload {
-        private final net.minecraft.core.BlockPos machinePos;
-        private final net.minecraft.resources.ResourceLocation catalystId;
+        private final BlockPos machinePos;
+        private final ResourceLocation catalystId;
         private final String machineKey;
         private final int pageCount;
         private final int totalRecipeCount;
@@ -109,7 +114,7 @@ public final class AggregateGenerationService {
             machineKey = first.machineTranslationKey();
             pageCount = first.pageCount();
             totalRecipeCount = first.totalRecipeCount();
-            pages = new ArrayList<>(java.util.Collections.nCopies(pageCount, null));
+            pages = new ArrayList<>(Collections.nCopies(pageCount, null));
             lastUpdateTick = now;
         }
 
@@ -132,7 +137,7 @@ public final class AggregateGenerationService {
         }
 
         private boolean complete() {
-            return pages.stream().allMatch(java.util.Objects::nonNull);
+            return pages.stream().allMatch(Objects::nonNull);
         }
 
         private List<AggregateRecipe> flatten() {

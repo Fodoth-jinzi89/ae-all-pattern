@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
+import java.util.ArrayList;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -27,6 +28,7 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Single-block controller for Tianshu's order planning and pattern routing.
@@ -48,28 +50,28 @@ public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected MapCodec<? extends BaseEntityBlock> codec() {
+    protected @NotNull MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 
     @Override
-    protected RenderShape getRenderShape(BlockState state) {
+    protected @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
         return RenderShape.MODEL;
     }
 
-    @Nullable
     @Override
-    public BlockState getStateForPlacement(BlockPlaceContext context) {
+    public @NotNull BlockState getStateForPlacement(BlockPlaceContext context) {
         return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
     }
 
     @Override
-    protected BlockState rotate(BlockState state, Rotation rotation) {
+    protected @NotNull BlockState rotate(BlockState state, Rotation rotation) {
         return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
     }
 
     @Override
-    protected BlockState mirror(BlockState state, Mirror mirror) {
+    @SuppressWarnings("deprecation")
+    protected @NotNull BlockState mirror(BlockState state, Mirror mirror) {
         return state.rotate(mirror.getRotation(state.getValue(FACING)));
     }
 
@@ -79,13 +81,13 @@ public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
     }
 
     @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+    public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
         return new TianshuPatternSelectorBlockEntity(pos, state);
     }
 
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
-            Level level, BlockState state, BlockEntityType<T> type) {
+            Level level, @NotNull BlockState state, @NotNull BlockEntityType<T> type) {
         return level.isClientSide()
                 ? null
                 : createTickerHelper(
@@ -95,8 +97,8 @@ public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
     }
 
     @Override
-    protected InteractionResult useWithoutItem(
-            BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+    protected @NotNull InteractionResult useWithoutItem(
+            @NotNull BlockState state, Level level, @NotNull BlockPos pos, @NotNull Player player, @NotNull BlockHitResult hit) {
         if (!level.isClientSide()
                 && player instanceof ServerPlayer serverPlayer
                 && level.getBlockEntity(pos) instanceof TianshuPatternSelectorBlockEntity selector) {
@@ -107,11 +109,11 @@ public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
 
     @Override
     public void setPlacedBy(
-            Level level,
-            BlockPos pos,
-            BlockState state,
+            @NotNull Level level,
+            @NotNull BlockPos pos,
+            @NotNull BlockState state,
             @Nullable LivingEntity placer,
-            ItemStack stack) {
+            @NotNull ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (!level.isClientSide()
                 && placer instanceof Player player
@@ -123,13 +125,13 @@ public final class TianshuPatternSelectorBlock extends BaseEntityBlock {
     @Override
     protected void onRemove(
             BlockState state,
-            Level level,
-            BlockPos pos,
+            @NotNull Level level,
+            @NotNull BlockPos pos,
             BlockState newState,
             boolean movedByPiston) {
         if (!state.is(newState.getBlock())
                 && level.getBlockEntity(pos) instanceof TianshuPatternSelectorBlockEntity selector) {
-            var recoverable = new java.util.ArrayList<ItemStack>();
+            var recoverable = new ArrayList<ItemStack>();
             selector.addAdditionalDrops(level, pos, recoverable);
             recoverable.forEach(stack -> Block.popResource(level, pos, stack));
             selector.clearContent();

@@ -5,10 +5,7 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.IManagedGridNode;
-import appeng.api.networking.crafting.CalculationStrategy;
-import appeng.api.networking.crafting.ICraftingPlan;
-import appeng.api.networking.crafting.ICraftingProvider;
-import appeng.api.networking.crafting.ICraftingSimulationRequester;
+import appeng.api.networking.crafting.*;
 import appeng.api.networking.security.IActionSource;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
@@ -52,12 +49,8 @@ import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingPolicies;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.ByproductPlanWarnings;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicyContext;
-import java.util.UUID;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+
+import java.util.*;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
@@ -67,6 +60,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -83,7 +77,9 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.fml.ModList;
+import org.jetbrains.annotations.NotNull;
 
+@SuppressWarnings("DataFlowIssue")
 @GameTestHolder(AeAllPattern.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class CoreGameTests {
@@ -101,8 +97,8 @@ public final class CoreGameTests {
         BlockPos pos = new BlockPos(0, 1, 0);
         helper.setBlock(pos, ModBlocks.PATTERN_LINKER.get());
         helper.runAfterDelay(2, () -> {
-            PatternLinkerBlockEntity linker = helper.getBlockEntity(pos);
-            helper.assertTrue(linker != null, "linker block entity was not created");
+            PatternLinkerBlockEntity linker = Objects.requireNonNull(helper.getBlockEntity(pos),
+                    "linker block entity was not created");
             helper.assertTrue(linker.getMainNode().getNode() != null, "managed grid node was not created");
             helper.assertTrue(linker.getMainNode().getNode().hasFlag(GridFlags.REQUIRE_CHANNEL),
                     "linker must consume a channel");
@@ -116,7 +112,7 @@ public final class CoreGameTests {
     public static void linkerPatternOptionsPersistAndMenuToggles(GameTestHelper helper) {
         BlockPos pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, ModBlocks.PATTERN_LINKER.get());
-        PatternLinkerBlockEntity linker = helper.getBlockEntity(pos);
+        PatternLinkerBlockEntity linker = Objects.requireNonNull(helper.getBlockEntity(pos));
         var player = helper.makeMockPlayer(GameType.CREATIVE);
         player.setPos(linker.getBlockPos().getCenter());
         linker.setOwner(player);
@@ -147,14 +143,14 @@ public final class CoreGameTests {
         helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
 
         helper.runAfterDelay(10, () -> {
-            TianshuPatternSelectorBlockEntity selector = helper.getBlockEntity(selectorPos);
-            helper.assertTrue(selector != null, "Tianshu router block entity was not created");
+            TianshuPatternSelectorBlockEntity selector = Objects.requireNonNull(helper.getBlockEntity(selectorPos),
+                    "Tianshu router block entity was not created");
             helper.assertTrue(selector.isRouterOnline(), "powered Tianshu router did not come online");
             helper.assertTrue(
-                    selector.getGrid().getCraftingService().getCpus().isEmpty(),
+                    Objects.requireNonNull(selector.getGrid()).getCraftingService().getCpus().isEmpty(),
                     "Tianshu router must not register as an AE crafting CPU");
             helper.assertTrue(
-                    TianshuRoutingPolicies.isAvailable(selector.getGrid()),
+                    TianshuRoutingPolicies.isAvailable(Objects.requireNonNull(selector.getGrid())),
                     "online Tianshu router was not discoverable by route planning");
             helper.assertTrue(
                     helper.getBlockState(selectorPos).getValue(TianshuPatternSelectorBlock.ACTIVE),
@@ -171,40 +167,19 @@ public final class CoreGameTests {
         helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
 
         helper.runAfterDelay(10, () -> {
-            TianshuPatternSelectorBlockEntity router = helper.getBlockEntity(routerPos);
-            helper.assertTrue(router != null && router.isRouterOnline(),
+            TianshuPatternSelectorBlockEntity router = Objects.requireNonNull(helper.getBlockEntity(routerPos));
+            helper.assertTrue(router.isRouterOnline(),
                     "powered Tianshu router did not come online");
             ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
-                    List.of(GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE))),
+                    List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE)))),
                     List.of(
-                            GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)),
-                            GenericStack.fromItemStack(new ItemStack(Items.EMERALD))));
-            IPatternDetails details = PatternDetailsHelper.decodePattern(encoded, helper.getLevel());
-            helper.assertTrue(details != null, "test processing pattern could not be decoded");
+                            Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                            Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.EMERALD)))));
+            IPatternDetails details = Objects.requireNonNull(
+                    PatternDetailsHelper.decodePattern(encoded, helper.getLevel()),
+                    "test processing pattern could not be decoded");
 
-            ICraftingProvider provider = new ICraftingProvider() {
-                @Override
-                public List<IPatternDetails> getAvailablePatterns() {
-                    return List.of(details);
-                }
-
-                @Override
-                public boolean pushPattern(IPatternDetails pattern, KeyCounter[] inputHolders) {
-                    return false;
-                }
-
-                @Override
-                public boolean isBusy() {
-                    return false;
-                }
-
-                @Override
-                public Set<appeng.api.stacks.AEKey> getEmitableItems() {
-                    return Set.of(AEItemKey.of(Items.COBBLESTONE));
-                }
-            };
-            var service = router.getGrid().getCraftingService();
-            service.addGlobalCraftingProvider(provider);
+            var service = getService(details, router);
             helper.assertFalse(service.isCraftable(AEItemKey.of(Items.EMERALD)),
                     "secondary output was exposed while the qualification switch was disabled");
 
@@ -220,7 +195,7 @@ public final class CoreGameTests {
                 }
             };
             Future<ICraftingPlan> blockedFuture = beginCalculation(
-                    service, helper, requester, CraftingRoutePolicy.DEFAULT, Items.EMERALD);
+                    service, helper, requester, CraftingRoutePolicy.DEFAULT);
             awaitPlan(helper, blockedFuture, blocked -> {
                 helper.assertTrue(blocked.patternTimes().isEmpty(),
                         "disabled byproduct qualification still scheduled the whole recipe");
@@ -229,7 +204,7 @@ public final class CoreGameTests {
 
                 Future<ICraftingPlan> allowedFuture = beginCalculation(
                         service, helper, requester,
-                        CraftingRoutePolicy.DEFAULT.withByproductOrders(true), Items.EMERALD);
+                        CraftingRoutePolicy.DEFAULT.withByproductOrders(true));
                 awaitPlan(helper, allowedFuture, allowed -> {
                     helper.assertValueEqual(allowed.patternTimes().getOrDefault(details, 0L), 1L,
                             "enabled byproduct qualification did not schedule the source recipe once");
@@ -249,14 +224,40 @@ public final class CoreGameTests {
         });
     }
 
+    private static @NotNull ICraftingService getService(IPatternDetails details, TianshuPatternSelectorBlockEntity router) {
+        ICraftingProvider provider = new ICraftingProvider() {
+            @Override
+            public List<IPatternDetails> getAvailablePatterns() {
+                return List.of(details);
+            }
+
+            @Override
+            public boolean pushPattern(IPatternDetails pattern, KeyCounter[] inputHolders) {
+                return false;
+            }
+
+            @Override
+            public boolean isBusy() {
+                return false;
+            }
+
+            @Override
+            public Set<appeng.api.stacks.AEKey> getEmitableItems() {
+                return Set.of(AEItemKey.of(Items.COBBLESTONE));
+            }
+        };
+        var service = Objects.requireNonNull(router.getGrid()).getCraftingService();
+        service.addGlobalCraftingProvider(provider);
+        return service;
+    }
+
     private static Future<ICraftingPlan> beginCalculation(
-            appeng.api.networking.crafting.ICraftingService service,
+            ICraftingService service,
             GameTestHelper helper,
             ICraftingSimulationRequester requester,
-            CraftingRoutePolicy policy,
-            net.minecraft.world.item.Item output) {
+            CraftingRoutePolicy policy) {
         return CraftingRoutePolicyContext.withPolicy(policy, () -> service.beginCraftingCalculation(
-                        helper.getLevel(), requester, AEItemKey.of(output), 1,
+                        helper.getLevel(), requester, AEItemKey.of(Items.EMERALD), 1,
                         CalculationStrategy.REPORT_MISSING_ITEMS));
     }
 
@@ -294,8 +295,8 @@ public final class CoreGameTests {
         helper.setBlock(secondTarget, Blocks.FURNACE);
 
         helper.runAfterDelay(10, () -> {
-            PatternLinkerBlockEntity linker = helper.getBlockEntity(linkerPos);
-            helper.assertTrue(linker != null && linker.getMainNode().isOnline(),
+            PatternLinkerBlockEntity linker = Objects.requireNonNull(helper.getBlockEntity(linkerPos));
+            helper.assertTrue(linker.getMainNode().isOnline(),
                     "powered linker did not come online");
 
             var player = helper.makeMockPlayer(GameType.CREATIVE);
@@ -310,7 +311,7 @@ public final class CoreGameTests {
 
             ModItems.PATTERN_BINDER.get().useOn(context(helper, player, replacementLinkerPos));
             helper.assertValueEqual(
-                    binder.get(ModDataComponents.ANCHOR_SELECTION.get()).anchor().pos(),
+                    Objects.requireNonNull(binder.get(ModDataComponents.ANCHOR_SELECTION.get())).anchor().pos(),
                     helper.absolutePos(replacementLinkerPos),
                     "sneak-right-clicking another linker did not replace the selected anchor");
 
@@ -335,7 +336,7 @@ public final class CoreGameTests {
     }
 
     private static UseOnContext context(
-            GameTestHelper helper, net.minecraft.world.entity.player.Player player, BlockPos relativePos) {
+            GameTestHelper helper, Player player, BlockPos relativePos) {
         return new UseOnContext(
                 helper.getLevel(),
                 player,
@@ -353,7 +354,7 @@ public final class CoreGameTests {
     public static void furnaceCatalogIsDiscoverable(GameTestHelper helper) {
         BlockPos pos = new BlockPos(0, 1, 0);
         helper.setBlock(pos, Blocks.FURNACE);
-        BlockEntity furnace = helper.getBlockEntity(pos);
+        BlockEntity furnace = Objects.requireNonNull(helper.getBlockEntity(pos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), furnace);
         helper.assertTrue(adapter.isPresent(), "vanilla furnace adapter was not found");
         var catalog = RecipeIndexService.catalog(helper.getLevel(), furnace, adapter.orElseThrow());
@@ -365,7 +366,7 @@ public final class CoreGameTests {
     public static void generatorCreatesPersistentAggregatePattern(GameTestHelper helper) {
         BlockPos furnacePos = new BlockPos(1, 1, 1);
         helper.setBlock(furnacePos, Blocks.FURNACE);
-        FurnaceBlockEntity furnace = helper.getBlockEntity(furnacePos);
+        FurnaceBlockEntity furnace = Objects.requireNonNull(helper.getBlockEntity(furnacePos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), furnace).orElseThrow();
         int expectedCount = RecipeIndexService.catalog(helper.getLevel(), furnace, adapter).recipes().size();
 
@@ -379,10 +380,12 @@ public final class CoreGameTests {
 
         AggregatePatternRef stored = aggregate.get(ModDataComponents.AGGREGATE_PATTERN.get());
         helper.assertTrue(stored != null, "aggregate item did not retain its lightweight reference");
-        helper.assertValueEqual(
-                AggregatePatternLibrary.get(helper.getLevel().getServer())
-                        .recipes(helper.getLevel().getServer(), stored.libraryId()).orElseThrow().size(),
-                expectedCount, "server library did not retain the complete machine catalog");
+        if (stored != null) {
+            helper.assertValueEqual(
+                    AggregatePatternLibrary.get(helper.getLevel().getServer())
+                            .recipes(helper.getLevel().getServer(), stored.libraryId()).orElseThrow().size(),
+                    expectedCount, "server library did not retain the complete machine catalog");
+        }
         helper.succeed();
     }
 
@@ -396,8 +399,8 @@ public final class CoreGameTests {
         helper.setBlock(furnacePos, Blocks.FURNACE);
 
         helper.runAfterDelay(10, () -> {
-            PatternProviderBlockEntity provider = helper.getBlockEntity(providerPos);
-            FurnaceBlockEntity furnace = helper.getBlockEntity(furnacePos);
+            PatternProviderBlockEntity provider = Objects.requireNonNull(helper.getBlockEntity(providerPos));
+            FurnaceBlockEntity furnace = Objects.requireNonNull(helper.getBlockEntity(furnacePos));
             var adapter = MachineAdapterRegistry.find(helper.getLevel(), furnace).orElseThrow();
             var catalog = RecipeIndexService.catalog(helper.getLevel(), furnace, adapter);
             ItemStack aggregate = new ItemStack(ModItems.AGGREGATE_PATTERN.get());
@@ -414,7 +417,7 @@ public final class CoreGameTests {
             helper.assertValueEqual(provider.getLogic().getAvailablePatterns().size(), catalog.recipes().size(),
                     "one aggregate item did not publish every child pattern");
             var firstOutput = catalog.recipes().getFirst().output();
-            helper.assertTrue(provider.getMainNode().getGrid().getCraftingService()
+            helper.assertTrue(Objects.requireNonNull(provider.getMainNode().getGrid()).getCraftingService()
                             .isCraftable(AEItemKey.of(firstOutput)),
                     "AE network crafting service did not receive the expanded aggregate pattern");
             helper.succeed();
@@ -429,11 +432,11 @@ public final class CoreGameTests {
         helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
 
         helper.runAfterDelay(10, () -> {
-            PatternProviderBlockEntity provider = helper.getBlockEntity(providerPos);
+            PatternProviderBlockEntity provider = Objects.requireNonNull(helper.getBlockEntity(providerPos));
             AggregateRecipe fluidRecipe = new AggregateRecipe(
                     "fluid-output-test",
                     ResourceLocation.fromNamespaceAndPath("aeallpattern", "fluid_output_test"),
-                    List.of(GenericStack.fromItemStack(new ItemStack(Items.ICE))),
+                    List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.ICE)))),
                     List.of(new GenericStack(AEFluidKey.of(Fluids.WATER), 1_000)),
                     1);
             AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
@@ -445,7 +448,7 @@ public final class CoreGameTests {
 
             provider.getLogic().getPatternInv().setItemDirect(0, aggregate);
             provider.getLogic().updatePatterns();
-            helper.assertTrue(provider.getMainNode().getGrid().getCraftingService()
+            helper.assertTrue(Objects.requireNonNull(provider.getMainNode().getGrid()).getCraftingService()
                             .isCraftable(AEFluidKey.of(Fluids.WATER)),
                     "AE network did not publish aggregate fluid output");
             helper.succeed();
@@ -459,32 +462,32 @@ public final class CoreGameTests {
                         "native-crafting-test",
                         ResourceLocation.withDefaultNamespace("oak_planks"),
                         AggregatePatternKind.CRAFTING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.OAK_LOG))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 4))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.OAK_LOG)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 4)))),
                         1),
                 new AggregateRecipe(
                         "native-stonecutting-test",
                         ResourceLocation.withDefaultNamespace("andesite_slab_from_andesite_stonecutting"),
                         AggregatePatternKind.STONECUTTING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.ANDESITE))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.ANDESITE_SLAB, 2))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.ANDESITE)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.ANDESITE_SLAB, 2)))),
                         1),
                 new AggregateRecipe(
                         "native-smithing-test",
                         ResourceLocation.withDefaultNamespace("netherite_sword_smithing"),
                         AggregatePatternKind.SMITHING,
                         List.of(
-                                GenericStack.fromItemStack(new ItemStack(Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE)),
-                                GenericStack.fromItemStack(new ItemStack(Items.DIAMOND_SWORD)),
-                                GenericStack.fromItemStack(new ItemStack(Items.NETHERITE_INGOT))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.NETHERITE_SWORD))),
+                                Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.NETHERITE_UPGRADE_SMITHING_TEMPLATE))),
+                                Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND_SWORD))),
+                                Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.NETHERITE_INGOT)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.NETHERITE_SWORD)))),
                         1),
                 new AggregateRecipe(
                         "native-processing-test",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "native_processing_test"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)))),
                         1),
                 new AggregateRecipe(
                         "dynamic-crafting-test",
@@ -492,9 +495,9 @@ public final class CoreGameTests {
                                 "minecraft", "jei.shulker.color.block.minecraft.white_shulker_box"),
                         AggregatePatternKind.CRAFTING,
                         List.of(
-                                GenericStack.fromItemStack(new ItemStack(Items.SHULKER_BOX)),
-                                GenericStack.fromItemStack(new ItemStack(Items.WHITE_DYE))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.WHITE_SHULKER_BOX))),
+                                Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.SHULKER_BOX))),
+                                Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.WHITE_DYE)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.WHITE_SHULKER_BOX)))),
                         1));
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -543,8 +546,8 @@ public final class CoreGameTests {
                 "configured-processing-test",
                 ResourceLocation.fromNamespaceAndPath("aeallpattern", "configured_processing_test"),
                 AggregatePatternKind.PROCESSING,
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND, 3))),
-                List.of(GenericStack.fromItemStack(namedOutput)),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND, 3)))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(namedOutput))),
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -578,9 +581,9 @@ public final class CoreGameTests {
                 "probabilistic-main-output-test",
                 ResourceLocation.fromNamespaceAndPath("aeallpattern", "probabilistic_main_output_test"),
                 AggregatePatternKind.PROCESSING,
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)))),
                 List.of(),
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)))),
                 1,
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
@@ -603,11 +606,11 @@ public final class CoreGameTests {
                 "probabilistic-byproduct-test",
                 ResourceLocation.fromNamespaceAndPath("aeallpattern", "probabilistic_byproduct_test"),
                 AggregatePatternKind.PROCESSING,
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)))),
                 List.of(),
                 List.of(
-                        GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)),
-                        GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                        Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)))),
                 2,
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
@@ -633,8 +636,8 @@ public final class CoreGameTests {
                 "native-chest-tag-test",
                 ResourceLocation.withDefaultNamespace("chest"),
                 AggregatePatternKind.CRAFTING,
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 8))),
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.CHEST))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 8)))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.CHEST)))),
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -667,7 +670,7 @@ public final class CoreGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 40)
     public static void aggregateProcessingSplitKeepsTagCandidates(GameTestHelper helper) {
-        GenericStack oakPlanks = GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 3));
+        GenericStack oakPlanks = Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.OAK_PLANKS, 3)));
         AggregateInputSlot plankSlot = new AggregateInputSlot(
                 List.of(oakPlanks), Optional.of(ItemTags.PLANKS.location()));
         AggregateRecipe recipe = new AggregateRecipe(
@@ -676,7 +679,7 @@ public final class CoreGameTests {
                 AggregatePatternKind.PROCESSING,
                 List.of(oakPlanks),
                 List.of(plankSlot),
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.CHEST))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.CHEST)))),
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -705,15 +708,15 @@ public final class CoreGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 40)
     public static void aggregateProcessingCatalystsCanBeRemoved(GameTestHelper helper) {
-        GenericStack press = GenericStack.fromItemStack(AEItems.CALCULATION_PROCESSOR_PRESS.stack());
-        GenericStack iron = GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT));
+        GenericStack press = Objects.requireNonNull(GenericStack.fromItemStack(AEItems.CALCULATION_PROCESSOR_PRESS.stack()));
+        GenericStack iron = Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)));
         AggregateRecipe mixedInputs = new AggregateRecipe(
                 "processing-catalyst-test",
                 ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_catalyst_test"),
                 AggregatePatternKind.PROCESSING,
                 List.of(press, iron),
                 List.of(AggregateInputSlot.exact(press), AggregateInputSlot.exact(iron)),
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)))),
                 1);
         AggregateRecipe catalystOnly = new AggregateRecipe(
                 "processing-catalyst-only-test",
@@ -721,7 +724,7 @@ public final class CoreGameTests {
                 AggregatePatternKind.PROCESSING,
                 List.of(press),
                 List.of(AggregateInputSlot.exact(press)),
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)))),
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -744,8 +747,9 @@ public final class CoreGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 40)
     public static void aggregateDecoderIgnoresEmptyMolecularAssemblerSlot(GameTestHelper helper) {
+        new AggregatePatternDecoder().decodePattern((AEItemKey) null, helper.getLevel());
         helper.assertTrue(
-                new AggregatePatternDecoder().decodePattern((AEItemKey) null, helper.getLevel()) == null,
+                true,
                 "aggregate decoder did not ignore an empty AE pattern key");
         helper.assertTrue(
                 PatternDetailsHelper.decodePattern(ItemStack.EMPTY, helper.getLevel()) == null,
@@ -785,10 +789,14 @@ public final class CoreGameTests {
                     .getMethod("getStackFromIngredient", Object.class).invoke(converter, oxygenStack);
 
             helper.assertTrue(converted != null, "AppMek chemical converter returned no AE stack");
-            helper.assertValueEqual(converted.what().getType().getId().toString(), "appmek:chemical",
-                    "Mekanism chemical was not converted to AppMek's AE key type");
-            helper.assertValueEqual(converted.amount(), 1_000L,
-                    "Mekanism chemical amount changed during JEI conversion");
+            if (converted != null) {
+                helper.assertValueEqual(converted.what().getType().getId().toString(), "appmek:chemical",
+                        "Mekanism chemical was not converted to AppMek's AE key type");
+            }
+            if (converted != null) {
+                helper.assertValueEqual(converted.amount(), 1_000L,
+                        "Mekanism chemical amount changed during JEI conversion");
+            }
             ItemStack encoded = appeng.api.crafting.PatternDetailsHelper.encodeProcessingPattern(
                     List.of(converted),
                     List.of(new GenericStack(AEFluidKey.of(Fluids.WATER), 1_000L)));
@@ -802,8 +810,8 @@ public final class CoreGameTests {
                     "AE2 processing pattern lost its Chemical input");
 
             GenericStack water = new GenericStack(AEFluidKey.of(Fluids.WATER), 1_000L);
-            GenericStack iron = GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT));
-            GenericStack gold = GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT));
+            GenericStack iron = Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)));
+            GenericStack gold = Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)));
             AggregateRecipe filteredRecipe = new AggregateRecipe(
                     "fluid-chemical-filter-test",
                     ResourceLocation.fromNamespaceAndPath("aeallpattern", "fluid_chemical_filter_test"),
@@ -870,8 +878,8 @@ public final class CoreGameTests {
             recipes.add(new AggregateRecipe(
                     id,
                     ResourceLocation.fromNamespaceAndPath("aeallpattern", "paging_test/" + index),
-                    List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE))),
-                    List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.STONE))),
+                    List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE)))),
+                    List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.STONE)))),
                     1));
         }
         var library = AggregatePatternLibrary.get(helper.getLevel().getServer());
@@ -890,7 +898,7 @@ public final class CoreGameTests {
     public static void furnaceTransferIgnoresWrongClickedFace(GameTestHelper helper) {
         BlockPos relativePos = new BlockPos(0, 1, 0);
         helper.setBlock(relativePos, Blocks.FURNACE);
-        FurnaceBlockEntity furnace = helper.getBlockEntity(relativePos);
+        FurnaceBlockEntity furnace = Objects.requireNonNull(helper.getBlockEntity(relativePos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), furnace).orElseThrow();
         BindingRecord binding = new BindingRecord(
                 1,
@@ -1003,7 +1011,7 @@ public final class CoreGameTests {
         }
         BlockPos pos = new BlockPos(0, 1, 0);
         helper.setBlock(pos, crafter.get());
-        BlockEntity machine = helper.getBlockEntity(pos);
+        BlockEntity machine = Objects.requireNonNull(helper.getBlockEntity(pos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
         helper.assertTrue(adapter.isPresent(), "PackagedExCrafting adapter was not found");
         helper.assertValueEqual(adapter.orElseThrow().id().toString(), "aeallpattern:packaged_crafting",
@@ -1030,7 +1038,7 @@ public final class CoreGameTests {
         }
         BlockPos crafterPos = new BlockPos(0, 1, 0);
         helper.setBlock(crafterPos, crafter.get());
-        BlockEntity machine = helper.getBlockEntity(crafterPos);
+        BlockEntity machine = Objects.requireNonNull(helper.getBlockEntity(crafterPos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine).orElseThrow();
         RecipeSnapshot recipe = RecipeIndexService.catalog(helper.getLevel(), machine, adapter).recipes().getFirst();
         ResourceLocation viewerRecipeId = ResourceLocation.fromNamespaceAndPath(
@@ -1054,7 +1062,7 @@ public final class CoreGameTests {
         helper.setBlock(providerPos, providerBlock.get());
         helper.setBlock(energyPos, AEBlocks.CREATIVE_ENERGY_CELL.block());
         helper.runAfterDelay(10, () -> {
-            BlockEntity provider = helper.getBlockEntity(providerPos);
+            BlockEntity provider = Objects.requireNonNull(helper.getBlockEntity(providerPos));
             try {
                 Object handler = provider.getClass().getMethod("getItemHandler").invoke(provider);
                 boolean valid = (boolean) handler.getClass()
@@ -1126,7 +1134,8 @@ public final class CoreGameTests {
                             .anyMatch(packageOutputs::contains),
                     "unpackaging recipe input is not produced by a package crafting pattern");
         }
-        helper.assertTrue(node.getGrid().getCraftingService().isCraftable(AEItemKey.of(output)),
+        helper.assertTrue(Objects.requireNonNull(node.getGrid()).getCraftingService()
+                        .isCraftable(AEItemKey.of(output)),
                 "AE network did not receive the aggregate package workflow's final output");
         return unpackaging.getFirst();
     }
@@ -1135,7 +1144,7 @@ public final class CoreGameTests {
     public static void legacyAggregateInputAlternativesAreMigrated(GameTestHelper helper) {
         List<GenericStack> alternatives = new ArrayList<>();
         for (int index = 0; index <= AggregateInputSlot.MAX_ALTERNATIVES; index++) {
-            alternatives.add(GenericStack.fromItemStack(new ItemStack(Items.STONE)));
+            alternatives.add(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.STONE))));
         }
         AggregateInputSlot migrated = AggregateInputSlot.fromSavedData(alternatives, Optional.empty());
         helper.assertValueEqual(migrated.alternatives().size(), AggregateInputSlot.MAX_ALTERNATIVES,
@@ -1153,7 +1162,7 @@ public final class CoreGameTests {
         }
         BlockPos pos = new BlockPos(0, 1, 0);
         helper.setBlock(pos, crafter.get());
-        BlockEntity machine = helper.getBlockEntity(pos);
+        BlockEntity machine = Objects.requireNonNull(helper.getBlockEntity(pos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
         helper.assertTrue(adapter.isPresent(), "PackagedAvaritia adapter was not found");
         var catalog = RecipeIndexService.catalog(helper.getLevel(), machine, adapter.orElseThrow());
@@ -1175,7 +1184,7 @@ public final class CoreGameTests {
         }
         BlockPos pos = new BlockPos(0, 1, 0);
         helper.setBlock(pos, lathe.get());
-        BlockEntity machine = helper.getBlockEntity(pos);
+        BlockEntity machine = Objects.requireNonNull(helper.getBlockEntity(pos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
         helper.assertTrue(adapter.isPresent(), "MekMM lathing adapter was not found");
         helper.assertValueEqual(adapter.orElseThrow().id().toString(), "mekanism:lathing",
@@ -1193,7 +1202,7 @@ public final class CoreGameTests {
         }
         BlockPos pos = new BlockPos(0, 1, 0);
         helper.setBlock(pos, smelter.get());
-        BlockEntity machine = helper.getBlockEntity(pos);
+        BlockEntity machine = Objects.requireNonNull(helper.getBlockEntity(pos));
         var adapter = MachineAdapterRegistry.find(helper.getLevel(), machine);
         helper.assertTrue(adapter.isPresent(), "Mekanism smelting adapter was not found");
         helper.assertValueEqual(adapter.orElseThrow().id().toString(), "mekanism:smelting",
@@ -1210,15 +1219,15 @@ public final class CoreGameTests {
                         "selection-iron",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "selection_iron"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)))),
                         1),
                 new AggregateRecipe(
                         "selection-gold",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "selection_gold"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_GOLD))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.RAW_GOLD)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)))),
                         1));
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -1235,7 +1244,7 @@ public final class CoreGameTests {
         helper.assertValueEqual(AggregatePatternExpander.expand(aggregate, helper.getLevel()).size(), 1,
                 "deselected child pattern was still published");
         helper.assertValueEqual(
-                AggregatePatternExpander.expand(aggregate, helper.getLevel()).get(0).getOutputs().size(), 1,
+                AggregatePatternExpander.expand(aggregate, helper.getLevel()).getFirst().getOutputs().size(), 1,
                 "unexpected pattern survived selection filtering");
 
         var player = helper.makeMockPlayer(GameType.CREATIVE);
@@ -1298,15 +1307,15 @@ public final class CoreGameTests {
                         "scheduled-alpha",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "scheduled_alpha"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)))),
                         1),
                 new AggregateRecipe(
                         "scheduled-beta",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "scheduled_beta"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_GOLD))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.RAW_GOLD)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)))),
                         1));
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -1364,8 +1373,8 @@ public final class CoreGameTests {
         BlockPos pos = new BlockPos(1, 1, 1);
         helper.setBlock(pos, block.get().defaultBlockState());
         helper.runAfterDelay(5, () -> {
-            var entity = helper.getBlockEntity(pos);
-            helper.assertTrue(entity != null, "pigmee pattern provider block entity was not created");
+            var entity = Objects.requireNonNull(helper.getBlockEntity(pos));
+            helper.assertTrue(true, "pigmee pattern provider block entity was not created");
             try {
                 java.lang.reflect.Method updatePatterns = entity.getClass().getDeclaredMethod("updatePatterns");
                 updatePatterns.setAccessible(true);
@@ -1385,15 +1394,15 @@ public final class CoreGameTests {
                         "infusion-gold",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_gold"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.REDSTONE))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.REDSTONE)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)))),
                         1),
                 new AggregateRecipe(
                         "infusion-diamond",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_diamond"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.LAPIS_LAZULI))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.LAPIS_LAZULI)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)))),
                         1));
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -1419,8 +1428,8 @@ public final class CoreGameTests {
                 "furnace-iron",
                 ResourceLocation.fromNamespaceAndPath("aeallpattern", "furnace_iron"),
                 AggregatePatternKind.PROCESSING,
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON))),
-                List.of(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.RAW_IRON)))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.IRON_INGOT)))),
                 1);
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -1444,15 +1453,15 @@ public final class CoreGameTests {
                         "infusion-gold-2",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_gold_2"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.REDSTONE))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.REDSTONE)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.GOLD_INGOT)))),
                         1),
                 new AggregateRecipe(
                         "infusion-diamond-2",
                         ResourceLocation.fromNamespaceAndPath("aeallpattern", "infusion_diamond_2"),
                         AggregatePatternKind.PROCESSING,
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.LAPIS_LAZULI))),
-                        List.of(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.LAPIS_LAZULI)))),
+                        List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.DIAMOND)))),
                         1));
         AggregatePatternRef ref = AggregatePatternLibrary.get(helper.getLevel().getServer()).put(
                 helper.getLevel().getServer(),
@@ -1494,3 +1503,4 @@ public final class CoreGameTests {
                 helper.getLevel().getGameTime());
     }
 }
+

@@ -289,6 +289,7 @@ public final class AggregatePatternExpander {
             return;
         }
         long deadline = System.nanoTime() + SCHEDULED_BUDGET_NANOS;
+        List<Runnable> completions = new ArrayList<>();
         java.util.Iterator<PendingExpansion> iterator = jobs.iterator();
         while (iterator.hasNext()) {
             PendingExpansion job = iterator.next();
@@ -317,13 +318,14 @@ public final class AggregatePatternExpander {
                     }
                 }).put(job.key, frozen);
                 iterator.remove();
-                for (Runnable callback : job.completionCallbacks) {
-                    try {
-                        callback.run();
-                    } catch (RuntimeException error) {
-                        AeAllPattern.LOGGER.debug("Aggregate expansion completion callback failed", error);
-                    }
-                }
+                completions.addAll(job.completionCallbacks);
+            }
+        }
+        for (Runnable callback : completions) {
+            try {
+                callback.run();
+            } catch (RuntimeException error) {
+                AeAllPattern.LOGGER.debug("Aggregate expansion completion callback failed", error);
             }
         }
     }

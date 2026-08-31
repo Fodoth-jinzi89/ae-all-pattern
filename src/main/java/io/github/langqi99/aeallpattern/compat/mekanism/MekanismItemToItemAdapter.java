@@ -7,11 +7,8 @@ import io.github.langqi99.aeallpattern.machine.ItemHandlerTransfer;
 import io.github.langqi99.aeallpattern.recipe.RecipeCatalog;
 import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
 import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+
+import java.util.*;
 import java.util.function.Supplier;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
@@ -118,7 +115,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
                     break;
                 }
                 long needed = holder.value().getInput().getNeededAmount(representation);
-                if (needed < 1 || needed > representation.getMaxStackSize() || needed > Integer.MAX_VALUE) {
+                if (needed < 1 || needed > representation.getMaxStackSize()) {
                     filtered++;
                     continue;
                 }
@@ -130,7 +127,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
                 }
                 String normalizedInput = normalize(input);
                 String normalizedOutput = normalize(output);
-                if (AEItemKey.of(input).equals(AEItemKey.of(output))
+                if (Objects.equals(AEItemKey.of(input), AEItemKey.of(output))
                         || !seen.add(List.of(normalizedInput, normalizedOutput))) {
                     filtered++;
                     continue;
@@ -252,7 +249,8 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
             if (remainder.isEmpty()) {
                 break;
             }
-            if (isSlotType(slot, "mekanism.common.inventory.slot.InputInventorySlot")) {
+            if (isSlotType(slot, "mekanism.common.inventory.slot.InputInventorySlot")
+                    || !isSlotType(slot, "mekanism.common.inventory.slot.OutputInventorySlot")) {
                 remainder = slot.insertItem(remainder, action, AutomationType.MANUAL);
             }
         }

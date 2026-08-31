@@ -2,7 +2,6 @@ package io.github.langqi99.aeallpattern.network;
 
 import appeng.api.stacks.GenericStack;
 import io.github.langqi99.aeallpattern.AeAllPattern;
-import io.github.langqi99.aeallpattern.aggregate.AggregatePatternSelectionMenu;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternSelectionMenu.Entry;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternSelection;
 import java.util.ArrayList;
@@ -12,6 +11,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * One bounded page of a search result. A full result is several pages; the client assembles
@@ -82,7 +82,7 @@ public record AggregateSearchResultPayload(
     }
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
+    public @NotNull Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
 }

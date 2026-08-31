@@ -30,6 +30,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.item.ItemStack;
 import java.util.List;
 import net.minecraft.world.level.block.Block;
+import org.jetbrains.annotations.NotNull;
 
 /** AE-owned anchor for bindings. It consumes one channel and a small idle power budget. */
 public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity implements MenuProvider {
@@ -88,12 +89,12 @@ public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity imple
     }
 
     @Override
-    public Component getDisplayName() {
+    public @NotNull Component getDisplayName() {
         return Component.translatable("gui.aeallpattern.linker_config.title");
     }
 
     @Override
-    public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) {
+    public AbstractContainerMenu createMenu(int id, @NotNull Inventory inventory, @NotNull Player player) {
         return new AggregatePatternConfigMenu(id, inventory, worldPosition);
     }
 

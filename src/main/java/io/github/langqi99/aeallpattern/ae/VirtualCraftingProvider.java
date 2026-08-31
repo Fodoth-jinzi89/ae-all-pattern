@@ -28,6 +28,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import io.github.langqi99.aeallpattern.binding.BlockEntityFingerprint;
 import io.github.langqi99.aeallpattern.diagnostics.PerformanceMetrics;
 
+@SuppressWarnings("deprecation")
 public final class VirtualCraftingProvider implements ICraftingProvider {
     private final PatternLinkerBlockEntity linker;
     private final IncomingBuffer buffer;
@@ -265,7 +266,6 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
 
         private final long generation;
         private final ServerLevel linkerLevel;
-        private final GlobalPos anchor;
         private final AggregatePatternOptions options;
         private final List<BindingRecord> bindings;
         private final Map<VirtualPatternDetails, PatternRoute> rebuilt = new LinkedHashMap<>();
@@ -277,7 +277,7 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
         private RefreshJob(PatternLinkerBlockEntity linker, ServerLevel linkerLevel) {
             this.generation = RecipeIndexService.generation();
             this.linkerLevel = linkerLevel;
-            this.anchor = linker.getGlobalPos();
+            GlobalPos anchor = linker.getGlobalPos();
             this.options = linker.getPatternOptions();
             this.bindings = BindingSavedData.get(linkerLevel.getServer()).byAnchor(anchor);
         }

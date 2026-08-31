@@ -74,7 +74,7 @@ public final class AggregatePatternSearch {
             } else {
                 matched = key.getDisplayName().getString().toLowerCase(Locale.ROOT).contains(term);
             }
-            if (negate ? matched : !matched) {
+            if (negate == matched) {
                 return false;
             }
         }
@@ -91,6 +91,7 @@ public final class AggregatePatternSearch {
                 .orElse(false);
     }
 
+    @SuppressWarnings("deprecation")
     private static boolean tagMatches(AEKey key, String term) {
         if (key instanceof AEItemKey itemKey) {
             return itemKey.getItem().builtInRegistryHolder().tags()

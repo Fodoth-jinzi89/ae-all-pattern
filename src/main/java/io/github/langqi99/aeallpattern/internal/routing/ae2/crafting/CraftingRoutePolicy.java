@@ -30,10 +30,10 @@ public record CraftingRoutePolicy(
     public static final int MAX_PRIORITY = 32;
 
     public CraftingRoutePolicy {
-        aggregatePriority = Math.max(MIN_PRIORITY, Math.min(MAX_PRIORITY, aggregatePriority));
-        pathPreference = Math.max(-1, Math.min(1, pathPreference));
-        stockSurplusPreference = Math.max(-1, Math.min(1, stockSurplusPreference));
-        yieldPreference = Math.max(-1, Math.min(1, yieldPreference));
+        aggregatePriority = Math.clamp(aggregatePriority, MIN_PRIORITY, MAX_PRIORITY);
+        pathPreference = Math.clamp(pathPreference, -1, 1);
+        stockSurplusPreference = Math.clamp(stockSurplusPreference, -1, 1);
+        yieldPreference = Math.clamp(yieldPreference, -1, 1);
         preferenceOrder = normalizeOrder(preferenceOrder);
     }
 
@@ -179,7 +179,7 @@ public record CraftingRoutePolicy(
                     Integer.parseInt(values[4]),
                     values[5].equals("1"),
                     values.length >= 7 ? Integer.parseInt(values[6]) : DEFAULT_PREFERENCE_ORDER,
-                    values.length >= 8 && values[7].equals("1"));
+                    values.length == 8 && values[7].equals("1"));
         } catch (NumberFormatException ignored) {
             return DEFAULT;
         }

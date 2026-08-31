@@ -21,15 +21,17 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import org.jetbrains.annotations.NotNull;
 
 /** Server-authoritative two-step binding tool. */
+@SuppressWarnings("deprecation")
 public final class PatternBinderItem extends Item {
     public PatternBinderItem(Properties properties) {
         super(properties);
     }
 
     @Override
-    public InteractionResult useOn(UseOnContext context) {
+    public @NotNull InteractionResult useOn(UseOnContext context) {
         Player player = context.getPlayer();
         if (player == null) {
             return InteractionResult.FAIL;
@@ -143,9 +145,13 @@ public final class PatternBinderItem extends Item {
         }
 
         if (existing.isPresent()) {
-            linker.cancelBinding(existing.get().bindingId());
+            if (linker != null) {
+                linker.cancelBinding(existing.get().bindingId());
+            }
             data.remove(existing.get().bindingId());
-            linker.refreshPatterns();
+            if (linker != null) {
+                linker.refreshPatterns();
+            }
             if (player instanceof ServerPlayer serverPlayer) {
                 BindingSyncService.send(serverPlayer);
             }
@@ -154,21 +160,26 @@ public final class PatternBinderItem extends Item {
         }
 
         long gameTime = targetLevel.getGameTime();
-        BindingRecord record = new BindingRecord(
-                BindingRecord.CURRENT_SCHEMA_VERSION,
-                UUID.randomUUID(),
-                player.getUUID(),
-                selection.anchor(),
-                target,
-                context.getClickedFace(),
-                selection.anchorFingerprint(),
-                BlockEntityFingerprint.of(targetBlockEntity),
-                targetAdapter.orElseThrow().id().toString(),
-                targetAdapter.orElseThrow().schemaVersion(),
-                gameTime,
-                gameTime);
+        BindingRecord record = null;
+        if (targetBlockEntity != null) {
+            record = new BindingRecord(
+                    BindingRecord.CURRENT_SCHEMA_VERSION,
+                    UUID.randomUUID(),
+                    player.getUUID(),
+                    selection.anchor(),
+                    target,
+                    context.getClickedFace(),
+                    selection.anchorFingerprint(),
+                    BlockEntityFingerprint.of(targetBlockEntity),
+                    targetAdapter.orElseThrow().id().toString(),
+                    targetAdapter.orElseThrow().schemaVersion(),
+                    gameTime,
+                    gameTime);
+        }
         data.put(record);
-        linker.refreshPatterns();
+        if (linker != null) {
+            linker.refreshPatterns();
+        }
         if (player instanceof ServerPlayer serverPlayer) {
             BindingSyncService.send(serverPlayer);
         }
@@ -178,7 +189,7 @@ public final class PatternBinderItem extends Item {
 
     @Override
     public void appendHoverText(
-            ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+            @NotNull ItemStack stack, @NotNull TooltipContext context, @NotNull List<Component> tooltip, @NotNull TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
         AnchorSelection selection = stack.get(ModDataComponents.ANCHOR_SELECTION.get());
         if (selection == null) {

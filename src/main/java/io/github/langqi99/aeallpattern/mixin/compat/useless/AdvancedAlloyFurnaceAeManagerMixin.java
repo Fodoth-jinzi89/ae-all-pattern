@@ -10,6 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -21,23 +22,23 @@ public abstract class AdvancedAlloyFurnaceAeManagerMixin {
     @Inject(method = "rebuildPatterns", at = @At("TAIL"), remap = false)
     private void aeallpattern$expandAggregatePatterns(CallbackInfo callback) {
         try {
-            Object owner = field(this, "owner");
-            Level level = (Level) invoke(owner, "getLevel");
-            if (level == null || level.isClientSide || !Boolean.TRUE.equals(invoke(owner, "canPublishPatterns"))) {
+            Object owner = aeallpattern$field(this, "owner");
+            Level level = (Level) aeallpattern$invoke(owner, "getLevel");
+            if (level == null || level.isClientSide || !Boolean.TRUE.equals(aeallpattern$invoke(owner, "canPublishPatterns"))) {
                 return;
             }
             @SuppressWarnings("unchecked")
-            List<IPatternDetails> patterns = (List<IPatternDetails>) field(this, "patterns");
+            List<IPatternDetails> patterns = (List<IPatternDetails>) aeallpattern$field(this, "patterns");
             patterns.removeIf(AggregatePatternMarkerDetails.class::isInstance);
 
-            Object stacks = invoke(owner, "getPatternStacks");
+            Object stacks = aeallpattern$invoke(owner, "getPatternStacks");
             if (!(stacks instanceof Iterable<?> iterable)) {
                 return;
             }
             for (Object value : iterable) {
                 if (value instanceof ItemStack stack) {
                     for (IPatternDetails pattern : AggregatePatternExpander.expand(stack, level)) {
-                        if (accepts(owner, pattern)) {
+                        if (aeallpattern$accepts(owner, pattern)) {
                             patterns.add(pattern);
                         }
                     }
@@ -49,18 +50,21 @@ public abstract class AdvancedAlloyFurnaceAeManagerMixin {
         }
     }
 
-    private static Object field(Object target, String name) throws ReflectiveOperationException {
+    @Unique
+    private static Object aeallpattern$field(Object target, String name) throws ReflectiveOperationException {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
         return field.get(target);
     }
 
-    private static Object invoke(Object target, String name) throws ReflectiveOperationException {
+    @Unique
+    private static Object aeallpattern$invoke(Object target, String name) throws ReflectiveOperationException {
         Method method = target.getClass().getMethod(name);
         return method.invoke(target);
     }
 
-    private static boolean accepts(Object owner, IPatternDetails pattern) throws ReflectiveOperationException {
+    @Unique
+    private static boolean aeallpattern$accepts(Object owner, IPatternDetails pattern) throws ReflectiveOperationException {
         Method method = owner.getClass().getMethod("acceptsPattern", IPatternDetails.class);
         return Boolean.TRUE.equals(method.invoke(owner, pattern));
     }

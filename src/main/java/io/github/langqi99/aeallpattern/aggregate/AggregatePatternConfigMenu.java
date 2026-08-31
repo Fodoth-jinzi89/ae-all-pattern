@@ -13,6 +13,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.NotNull;
 
 /** Server-authoritative editor for the aggregate pattern held by the player. */
 public final class AggregatePatternConfigMenu extends AbstractContainerMenu {
@@ -79,7 +80,7 @@ public final class AggregatePatternConfigMenu extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean clickMenuButton(Player player, int id) {
+    public boolean clickMenuButton(@NotNull Player player, int id) {
         if (id < TOGGLE_SPLIT_SAME_ITEMS || id > TOGGLE_REMOVE_OUTPUT_CHEMICALS) {
             return false;
         }
@@ -109,7 +110,7 @@ public final class AggregatePatternConfigMenu extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean stillValid(Player player) {
+    public boolean stillValid(@NotNull Player player) {
         if (linkerPos != null) {
             return player.distanceToSqr(linkerPos.getCenter()) <= 64
                     && player.level().getBlockEntity(linkerPos) instanceof PatternLinkerBlockEntity linker
@@ -119,7 +120,7 @@ public final class AggregatePatternConfigMenu extends AbstractContainerMenu {
     }
 
     @Override
-    public ItemStack quickMoveStack(Player player, int index) {
+    public @NotNull ItemStack quickMoveStack(@NotNull Player player, int index) {
         return ItemStack.EMPTY;
     }
 

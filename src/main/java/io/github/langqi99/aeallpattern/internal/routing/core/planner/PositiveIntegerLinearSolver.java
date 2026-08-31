@@ -87,7 +87,7 @@ public final class PositiveIntegerLinearSolver {
         }
     }
 
-    private static Result solveExact(int variableCount, List<ExactConstraint> constraints) {
+    private static Result solveExact(int auxiliaryOffset, List<ExactConstraint> constraints) {
         int rowCount = constraints.size();
         var shiftedMinimums = new BigInteger[rowCount];
         int artificialCount = 0;
@@ -99,8 +99,7 @@ public final class PositiveIntegerLinearSolver {
             if (shiftedMinimums[row].signum() > 0) artificialCount++;
         }
 
-        int auxiliaryOffset = variableCount;
-        int artificialOffset = variableCount + rowCount;
+        int artificialOffset = auxiliaryOffset + rowCount;
         int totalVariables = artificialOffset + artificialCount;
         var tableau = new Rational[rowCount][totalVariables + 1];
         for (var row : tableau) Arrays.fill(row, Rational.ZERO);
@@ -113,7 +112,7 @@ public final class PositiveIntegerLinearSolver {
             var constraint = constraints.get(row);
             boolean needsArtificial = shiftedMinimums[row].signum() > 0;
             BigInteger sign = needsArtificial ? BigInteger.ONE : BigInteger.ONE.negate();
-            for (int column = 0; column < variableCount; column++) {
+            for (int column = 0; column < auxiliaryOffset; column++) {
                 tableau[row][column] = Rational.of(
                         constraint.coefficients()[column].multiply(sign));
             }
@@ -141,11 +140,11 @@ public final class PositiveIntegerLinearSolver {
         if (objective.signum() < 0) return result(Status.INFEASIBLE);
         if (objective.signum() > 0) return result(Status.INTERNAL_ERROR);
 
-        var positiveRational = new Rational[variableCount];
+        var positiveRational = new Rational[auxiliaryOffset];
         Arrays.fill(positiveRational, Rational.ONE);
         for (int row = 0; row < rowCount; row++) {
             int basic = basis[row];
-            if (basic < variableCount) {
+            if (basic < auxiliaryOffset) {
                 positiveRational[basic] = tableau[row][totalVariables].add(Rational.ONE);
             }
         }
@@ -154,16 +153,16 @@ public final class PositiveIntegerLinearSolver {
         for (var value : positiveRational) {
             commonDenominator = lcm(commonDenominator, value.denominator());
         }
-        var integer = new BigInteger[variableCount];
-        for (int i = 0; i < variableCount; i++) {
+        var integer = new BigInteger[auxiliaryOffset];
+        for (int i = 0; i < auxiliaryOffset; i++) {
             integer[i] = positiveRational[i].numerator()
                     .multiply(commonDenominator.divide(positiveRational[i].denominator()));
         }
         minimizeCoordinates(integer, constraints);
         if (!isFeasible(integer, constraints)) return result(Status.INTERNAL_ERROR);
 
-        var result = new long[variableCount];
-        for (int i = 0; i < variableCount; i++) {
+        var result = new long[auxiliaryOffset];
+        for (int i = 0; i < auxiliaryOffset; i++) {
             if (integer[i].signum() <= 0 || integer[i].compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
                 return result(Status.COEFFICIENT_OVERFLOW);
             }
@@ -284,75 +283,68 @@ public final class PositiveIntegerLinearSolver {
 
     private enum SimplexStatus { OPTIMAL, UNBOUNDED }
 
-    private static final class Rational implements Comparable<Rational> {
-        private static final Rational ZERO = new Rational(BigInteger.ZERO, BigInteger.ONE);
-        private static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE);
-        private static final Rational NEGATIVE_ONE = new Rational(BigInteger.ONE.negate(), BigInteger.ONE);
+    private record Rational(BigInteger numerator, BigInteger denominator) implements Comparable<Rational> {
+            private static final Rational ZERO = new Rational(BigInteger.ZERO, BigInteger.ONE);
+            private static final Rational ONE = new Rational(BigInteger.ONE, BigInteger.ONE);
+            private static final Rational NEGATIVE_ONE = new Rational(BigInteger.ONE.negate(), BigInteger.ONE);
 
-        private final BigInteger numerator;
-        private final BigInteger denominator;
-
-        private Rational(BigInteger numerator, BigInteger denominator) {
-            if (denominator.signum() == 0) throw new ArithmeticException("zero denominator");
-            if (denominator.signum() < 0) {
-                numerator = numerator.negate();
-                denominator = denominator.negate();
+            private Rational(BigInteger numerator, BigInteger denominator) {
+                if (denominator.signum() == 0) throw new ArithmeticException("zero denominator");
+                if (denominator.signum() < 0) {
+                    numerator = numerator.negate();
+                    denominator = denominator.negate();
+                }
+                var gcd = numerator.gcd(denominator);
+                this.numerator = numerator.divide(gcd);
+                this.denominator = denominator.divide(gcd);
             }
-            var gcd = numerator.gcd(denominator);
-            this.numerator = numerator.divide(gcd);
-            this.denominator = denominator.divide(gcd);
-        }
 
-        static Rational of(BigInteger value) {
-            if (value.signum() == 0) return ZERO;
-            if (value.equals(BigInteger.ONE)) return ONE;
-            if (value.equals(BigInteger.ONE.negate())) return NEGATIVE_ONE;
-            return new Rational(value, BigInteger.ONE);
-        }
+            static Rational of(BigInteger value) {
+                if (value.signum() == 0) return ZERO;
+                if (value.equals(BigInteger.ONE)) return ONE;
+                if (value.equals(BigInteger.ONE.negate())) return NEGATIVE_ONE;
+                return new Rational(value, BigInteger.ONE);
+            }
 
-        Rational add(Rational other) {
-            return new Rational(numerator.multiply(other.denominator)
-                    .add(other.numerator.multiply(denominator)),
-                    denominator.multiply(other.denominator));
-        }
+            Rational add(Rational other) {
+                return new Rational(numerator.multiply(other.denominator)
+                        .add(other.numerator.multiply(denominator)),
+                        denominator.multiply(other.denominator));
+            }
 
-        Rational subtract(Rational other) {
-            return new Rational(numerator.multiply(other.denominator)
-                    .subtract(other.numerator.multiply(denominator)),
-                    denominator.multiply(other.denominator));
-        }
+            Rational subtract(Rational other) {
+                return new Rational(numerator.multiply(other.denominator)
+                        .subtract(other.numerator.multiply(denominator)),
+                        denominator.multiply(other.denominator));
+            }
 
-        Rational multiply(Rational other) {
-            return new Rational(numerator.multiply(other.numerator),
-                    denominator.multiply(other.denominator));
-        }
+            Rational multiply(Rational other) {
+                return new Rational(numerator.multiply(other.numerator),
+                        denominator.multiply(other.denominator));
+            }
 
-        Rational divide(Rational other) {
-            return new Rational(numerator.multiply(other.denominator),
-                    denominator.multiply(other.numerator));
-        }
+            Rational divide(Rational other) {
+                return new Rational(numerator.multiply(other.denominator),
+                        denominator.multiply(other.numerator));
+            }
 
-        int signum() { return numerator.signum(); }
-        BigInteger numerator() { return numerator; }
-        BigInteger denominator() { return denominator; }
+            int signum() {
+                return numerator.signum();
+            }
 
-        @Override
-        public int compareTo(Rational other) {
-            return numerator.multiply(other.denominator)
-                    .compareTo(other.numerator.multiply(denominator));
-        }
+            @Override
+            public int compareTo(Rational other) {
+                return numerator.multiply(other.denominator)
+                        .compareTo(other.numerator.multiply(denominator));
+            }
 
-        @Override
-        public boolean equals(Object obj) {
-            return obj instanceof Rational other
-                    && numerator.equals(other.numerator)
-                    && denominator.equals(other.denominator);
-        }
+            @Override
+            public boolean equals(Object obj) {
+                return obj instanceof Rational(BigInteger numerator1, BigInteger denominator1)
+                        && numerator.equals(numerator1)
+                        && denominator.equals(denominator1);
+            }
 
-        @Override
-        public int hashCode() {
-            return 31 * numerator.hashCode() + denominator.hashCode();
-        }
     }
 
     private PositiveIntegerLinearSolver() { }

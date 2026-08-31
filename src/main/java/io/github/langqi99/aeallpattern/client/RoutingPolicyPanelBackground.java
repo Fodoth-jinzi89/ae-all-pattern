@@ -4,7 +4,9 @@ import appeng.client.gui.Icon;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.NotNull;
 
 /** Non-interactive AE-style backing used by the temporary order policy popover. */
 public final class RoutingPolicyPanelBackground extends AbstractWidget {
@@ -38,6 +40,6 @@ public final class RoutingPolicyPanelBackground extends AbstractWidget {
     }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput output) {
     }
 }

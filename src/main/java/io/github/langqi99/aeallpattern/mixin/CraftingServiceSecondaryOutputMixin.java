@@ -60,11 +60,11 @@ public abstract class CraftingServiceSecondaryOutputMixin implements SecondaryOu
      */
     @Inject(method = "getCraftingFor", at = @At("RETURN"), cancellable = true)
     private void aeallpattern$includeConfiguredSecondaryPatterns(
-            AEKey output, CallbackInfoReturnable<Collection<IPatternDetails>> cir) {
-        if (output == null || !TianshuRoutingPolicies.resolve(grid).allowByproductOrders()) {
+            AEKey whatToCraft, CallbackInfoReturnable<Collection<IPatternDetails>> cir) {
+        if (whatToCraft == null || !TianshuRoutingPolicies.resolve(grid).allowByproductOrders()) {
             return;
         }
-        Collection<IPatternDetails> secondary = aeallpattern$getSecondaryCraftingFor(output);
+        Collection<IPatternDetails> secondary = aeallpattern$getSecondaryCraftingFor(whatToCraft);
         if (secondary.isEmpty()) {
             return;
         }

@@ -6,6 +6,8 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
 import java.util.List;
+import java.util.Objects;
+
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
@@ -104,7 +106,7 @@ public record AggregateRecipe(
                 AggregatePatternKind.PROCESSING,
                 slots.stream().map(AggregateInputSlot::primary).toList(),
                 slots,
-                List.of(GenericStack.fromItemStack(snapshot.output())),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(snapshot.output()))),
                 0,
                 snapshot.processingTicks());
     }

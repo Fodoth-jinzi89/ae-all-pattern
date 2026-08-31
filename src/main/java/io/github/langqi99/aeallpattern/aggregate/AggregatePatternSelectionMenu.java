@@ -17,6 +17,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Server-authoritative pattern picker for one held aggregate pattern. The client keeps an
@@ -55,7 +56,7 @@ public final class AggregatePatternSelectionMenu extends AbstractContainerMenu {
     public AggregatePatternSelectionMenu(
             int id,
             Inventory inventory,
-            InteractionHand hand,
+            @Nullable InteractionHand hand,
             List<Entry> entries,
             AggregatePatternSelection selection) {
         super(ModMenus.AGGREGATE_PATTERN_SELECTION.get(), id);
@@ -141,7 +142,7 @@ public final class AggregatePatternSelectionMenu extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean clickMenuButton(Player player, int id) {
+    public boolean clickMenuButton(@NotNull Player player, int id) {
         AggregatePatternSelection updated;
         if (id == SELECT_ALL) {
             updated = AggregatePatternSelection.ALL_ENABLED;
@@ -174,12 +175,12 @@ public final class AggregatePatternSelectionMenu extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean stillValid(Player player) {
+    public boolean stillValid(@NotNull Player player) {
         return hand != null && isSelectable(player.getItemInHand(hand));
     }
 
     @Override
-    public ItemStack quickMoveStack(Player player, int index) {
+    public @NotNull ItemStack quickMoveStack(@NotNull Player player, int index) {
         return ItemStack.EMPTY;
     }
 

@@ -12,6 +12,7 @@ import io.github.langqi99.aeallpattern.client.RoutingTooltipArea;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import java.util.List;
 
 /** Native AE-styled editor for the Tianshu network defaults. */
 public final class TianshuRoutingScreen extends AEBaseScreen<TianshuRoutingMenu> {
@@ -34,7 +35,7 @@ public final class TianshuRoutingScreen extends AEBaseScreen<TianshuRoutingMenu>
         priorityField.setMaxLength(3);
         priorityField.setValue(Integer.toString(menu.getPolicy().aggregatePriority()));
         priorityField.setResponder(this::priorityChanged);
-        priorityField.setTooltipMessage(java.util.List.of(
+        priorityField.setTooltipMessage(List.of(
                 Component.translatable("gui.aeallpattern.routing.aggregate_priority"),
                 Component.translatable("gui.aeallpattern.routing.priority_semantics")));
     }
@@ -49,7 +50,7 @@ public final class TianshuRoutingScreen extends AEBaseScreen<TianshuRoutingMenu>
                 topPos + 36,
                 160,
                 14,
-                () -> java.util.List.of(
+                () -> List.of(
                         Component.translatable("gui.aeallpattern.routing.feasible"),
                         Component.translatable("gui.aeallpattern.routing.feasible_details"),
                         Component.translatable("gui.aeallpattern.routing.feasible_locked"))));
@@ -140,5 +141,9 @@ public final class TianshuRoutingScreen extends AEBaseScreen<TianshuRoutingMenu>
                 39,
                 0xFF303044,
                 false);
+    }
+
+    public RoutingQualificationButton getByproductOrders() {
+        return byproductOrders;
     }
 }

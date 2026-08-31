@@ -5,11 +5,10 @@ import appeng.api.stacks.GenericStack;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Optional;
+
+import java.util.*;
+
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -18,6 +17,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.Level;
 
 /** One logical recipe input whose alternatives are OR choices, never separate recipes. */
+@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public record AggregateInputSlot(
         List<GenericStack> alternatives,
         Optional<ResourceLocation> itemTag) {
@@ -35,7 +35,6 @@ public record AggregateInputSlot(
 
     public AggregateInputSlot {
         alternatives = copyAndValidate(alternatives);
-        itemTag = itemTag == null ? Optional.empty() : itemTag;
         if (itemTag.isPresent() && !(alternatives.getFirst().what() instanceof AEItemKey)) {
             throw new IllegalArgumentException("only item inputs can reference an item tag");
         }
@@ -70,8 +69,8 @@ public record AggregateInputSlot(
         long amount = primary().amount();
         LinkedHashMap<Object, GenericStack> resolved = new LinkedHashMap<>();
         tag.orElseThrow().stream()
-                .map(holder -> holder.value())
-                .sorted(Comparator.comparing(item -> registry.getKey(item).toString()))
+                .map(Holder::value)
+                .sorted(Comparator.comparing(item -> Objects.requireNonNull(registry.getKey(item)).toString()))
                 .limit(MAX_ALTERNATIVES)
                 .forEach(item -> {
                     GenericStack stack = new GenericStack(AEItemKey.of(item), amount);

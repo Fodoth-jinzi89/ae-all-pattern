@@ -15,6 +15,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.NotNull;
 
 /** One physical AE pattern item that publishes every captured child recipe. */
 public final class AggregatePatternItem extends Item {
@@ -23,7 +24,7 @@ public final class AggregatePatternItem extends Item {
     }
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+    public @NotNull InteractionResultHolder<ItemStack> use(@NotNull Level level, Player player, @NotNull InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (!stack.has(ModDataComponents.AGGREGATE_PATTERN.get())) {
             return InteractionResultHolder.pass(stack);
@@ -78,7 +79,7 @@ public final class AggregatePatternItem extends Item {
     }
 
     @Override
-    public Component getName(ItemStack stack) {
+    public @NotNull Component getName(ItemStack stack) {
         AggregatePatternRef ref = stack.get(ModDataComponents.AGGREGATE_PATTERN.get());
         if (ref == null) {
             return super.getName(stack);
@@ -93,7 +94,7 @@ public final class AggregatePatternItem extends Item {
 
     @Override
     public void appendHoverText(
-            ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+            @NotNull ItemStack stack, @NotNull TooltipContext context, @NotNull List<Component> tooltip, @NotNull TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
         AggregatePatternRef ref = stack.get(ModDataComponents.AGGREGATE_PATTERN.get());
         if (ref == null) {

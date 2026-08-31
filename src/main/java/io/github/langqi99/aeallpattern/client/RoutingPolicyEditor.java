@@ -11,6 +11,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.NotNull;
 
 /** Compact AE-styled, drag-sortable lexicographic route policy editor. */
 public final class RoutingPolicyEditor extends AbstractWidget implements ITooltip {
@@ -42,7 +43,7 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    protected void renderWidget(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         hoveredRow = dragFrom < 0 ? rowAt(mouseX, mouseY) : -1;
         CraftingRoutePolicy current = policy.get();
         float blend = animationBlend();
@@ -67,11 +68,10 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
             graphics.fill(getX() + 1, slotY, getX() + width - 1, slotY + ROW_HEIGHT - 1, 0x553C174F);
             graphics.renderOutline(getX(), slotY, width, ROW_HEIGHT - 1, 0xFFA85BE0);
 
-            float target = (float) Math.max(
+            float target = (float) Math.clamp(
+                    dragMouseY - getY() - dragGrabOffset,
                     0,
-                    Math.min(
-                            (CraftingRoutePolicy.CRITERION_COUNT - 1) * ROW_HEIGHT,
-                            dragMouseY - getY() - dragGrabOffset));
+                    (CraftingRoutePolicy.CRITERION_COUNT - 1) * ROW_HEIGHT);
             animatedRowY[dragFrom] = target;
             int floatingY = getY() + Math.round(target);
             graphics.fill(
@@ -218,8 +218,8 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
             return false;
         }
         dragMouseY = mouseY;
-        dragTo = Math.max(0, Math.min(CraftingRoutePolicy.CRITERION_COUNT - 1,
-                (int) ((mouseY - getY()) / ROW_HEIGHT)));
+        dragTo = Math.clamp(
+                (int) ((mouseY - getY()) / ROW_HEIGHT), 0, CraftingRoutePolicy.CRITERION_COUNT - 1);
         return true;
     }
 
@@ -242,14 +242,10 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
     private void remapAnimationAfterMove(int from, int to) {
         float[] before = animatedRowY.clone();
         if (from < to) {
-            for (int row = from; row < to; row++) {
-                animatedRowY[row] = before[row + 1];
-            }
+            if (to - from >= 0) System.arraycopy(before, from + 1, animatedRowY, from, to - from);
             animatedRowY[to] = before[from];
         } else if (from > to) {
-            for (int row = from; row > to; row--) {
-                animatedRowY[row] = before[row - 1];
-            }
+            if (from - to >= 0) System.arraycopy(before, to, animatedRowY, to + 1, from - to);
             animatedRowY[to] = before[from];
         }
     }
@@ -388,7 +384,7 @@ public final class RoutingPolicyEditor extends AbstractWidget implements IToolti
     }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    protected void updateWidgetNarration(net.minecraft.client.gui.narration.@NotNull NarrationElementOutput output) {
         defaultButtonNarrationText(output);
     }
 }
