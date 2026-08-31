@@ -60,7 +60,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
     @Inject(method = "<init>", at = @At("TAIL"))
     private void aeallpattern$addRouteToolbarButton(
             CraftConfirmMenu menu,
-            Inventory inventory,
+            Inventory playerInventory,
             Component title,
             ScreenStyle style,
             CallbackInfo ci) {
@@ -68,7 +68,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
                 () -> Icon.COG,
                 ignored -> aeallpattern$expanded = !aeallpattern$expanded,
                 null,
-                () -> routingMenu().aeallpattern$isRoutingAvailable()
+                () -> aeallpattern$routingMenu().aeallpattern$isRoutingAvailable()
                         ? List.of(
                                 Component.translatable("gui.aeallpattern.routing.order_settings"),
                                 Component.translatable("gui.aeallpattern.routing.order_settings_hint"))
@@ -91,7 +91,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
         aeallpattern$priorityField = new AETextField(style, font, panelX + 137, panelY + 3, 40, 12);
         aeallpattern$priorityField.setBordered(false);
         aeallpattern$priorityField.setMaxLength(3);
-        aeallpattern$priorityField.setValue(Integer.toString(policy().aggregatePriority()));
+        aeallpattern$priorityField.setValue(Integer.toString(aeallpattern$policy().aggregatePriority()));
         aeallpattern$priorityField.setResponder(this::aeallpattern$priorityChanged);
         aeallpattern$priorityField.setTooltipMessage(List.of(
                 Component.translatable("gui.aeallpattern.routing.aggregate_priority"),
@@ -112,15 +112,15 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
                 panelX + 4,
                 panelY + 37,
                 AEALLPATTERN_PANEL_WIDTH - 8,
-                () -> policy().allowByproductOrders(),
-                enabled -> update(policy().withByproductOrders(enabled))));
+                () -> aeallpattern$policy().allowByproductOrders(),
+                enabled -> aeallpattern$update(aeallpattern$policy().withByproductOrders(enabled))));
 
         aeallpattern$editor = addRenderableWidget(new RoutingPolicyEditor(
                 panelX + 4,
                 panelY + 54,
                 AEALLPATTERN_PANEL_WIDTH - 8,
-                this::policy,
-                this::update));
+                this::aeallpattern$policy,
+                this::aeallpattern$update));
     }
 
     @Inject(method = "updateBeforeRender", at = @At("TAIL"))
@@ -129,7 +129,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
             return;
         }
         aeallpattern$layoutPopup();
-        boolean available = routingMenu().aeallpattern$isRoutingAvailable();
+        boolean available = aeallpattern$routingMenu().aeallpattern$isRoutingAvailable();
         aeallpattern$routeButton.visible = true;
         aeallpattern$routeButton.active = available;
         boolean showPanel = available && aeallpattern$expanded;
@@ -141,7 +141,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
         if (!showPanel) {
             aeallpattern$priorityField.setFocused(false);
         } else if (!aeallpattern$priorityField.isFocused()) {
-            String expected = Integer.toString(policy().aggregatePriority());
+            String expected = Integer.toString(aeallpattern$policy().aggregatePriority());
             if (!expected.equals(aeallpattern$priorityField.getValue())) {
                 aeallpattern$syncingPriority = true;
                 aeallpattern$priorityField.setValue(expected);
@@ -170,7 +170,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
         aeallpattern$renderByproductWarning(graphics);
-        if (!aeallpattern$expanded || !routingMenu().aeallpattern$isRoutingAvailable()
+        if (!aeallpattern$expanded || !aeallpattern$routingMenu().aeallpattern$isRoutingAvailable()
                 || aeallpattern$panel == null) {
             return;
         }
@@ -202,11 +202,11 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
 
     @Unique
     private void aeallpattern$renderByproductWarning(GuiGraphics graphics) {
-        GenericStack warning = routingMenu().aeallpattern$getByproductWarning();
+        GenericStack warning = aeallpattern$routingMenu().aeallpattern$getByproductWarning();
         if (warning == null || warning.what() == null || warning.amount() <= 0) {
             return;
         }
-        int kinds = routingMenu().aeallpattern$getByproductWarningKinds();
+        int kinds = aeallpattern$routingMenu().aeallpattern$getByproductWarningKinds();
         Component text = kinds > 1
                 ? Component.translatable(
                         "gui.aeallpattern.routing.byproduct_warning_many",
@@ -246,8 +246,8 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
         try {
             int value = Integer.parseInt(text);
             if (value >= CraftingRoutePolicy.MIN_PRIORITY && value <= CraftingRoutePolicy.MAX_PRIORITY
-                    && value != policy().aggregatePriority()) {
-                update(policy().withAggregatePriority(value));
+                    && value != aeallpattern$policy().aggregatePriority()) {
+                aeallpattern$update(aeallpattern$policy().withAggregatePriority(value));
             }
         } catch (NumberFormatException ignored) {
             // A partial edit such as just '-' is allowed until it becomes valid.
@@ -296,7 +296,7 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void aeallpattern$closePopupWithEscape(
-            int keyCode, int scanCode, int modifiers, CallbackInfoReturnable<Boolean> cir) {
+            int keyCode, int scanCode, int p_keyPressed_3_, CallbackInfoReturnable<Boolean> cir) {
         if (aeallpattern$expanded && keyCode == 256) {
             aeallpattern$expanded = false;
             cir.setReturnValue(true);
@@ -322,17 +322,17 @@ public abstract class CraftConfirmScreenRoutingMixin extends AEBaseScreen<CraftC
     }
 
     @Unique
-    private void update(CraftingRoutePolicy policy) {
-        routingMenu().aeallpattern$updateRoutePolicy(policy);
+    private void aeallpattern$update(CraftingRoutePolicy policy) {
+        aeallpattern$routingMenu().aeallpattern$updateRoutePolicy(policy);
     }
 
     @Unique
-    private CraftingRoutePolicy policy() {
-        return routingMenu().aeallpattern$getRoutePolicy();
+    private CraftingRoutePolicy aeallpattern$policy() {
+        return aeallpattern$routingMenu().aeallpattern$getRoutePolicy();
     }
 
     @Unique
-    private CraftConfirmRoutingMenu routingMenu() {
+    private CraftConfirmRoutingMenu aeallpattern$routingMenu() {
         return (CraftConfirmRoutingMenu) menu;
     }
 }

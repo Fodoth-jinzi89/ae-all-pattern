@@ -269,7 +269,7 @@ final class CycleAnalysis<K> {
                     if (members.contains(byproduct.key())) return Kind.COMPLEX;
                 }
 
-                CraftInput<K> input = internal.get(0);
+                CraftInput<K> input = internal.getFirst();
                 InternalMode thisMode;
                 if (input.returned() && input.uses() == CraftInput.INFINITE_USES
                         && input.remainder() == null) {
@@ -288,7 +288,7 @@ final class CycleAnalysis<K> {
             }
         }
 
-        if (internalPatternCount == 0 || mode == null) return Kind.COMPLEX;
+        if (internalPatternCount == 0) return Kind.COMPLEX;
         if (mode == InternalMode.CATALYST) return Kind.CATALYST_STATE;
         if (!weightsAreConsistent(members, weights)) return Kind.LOSSY_CONVERSION;
         return hasExternalInputs ? Kind.CATALYZED_CONVERSION : Kind.PURE_CONVERSION;

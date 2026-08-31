@@ -52,13 +52,62 @@ class ClientRecipeMachineResolverTest {
         for (String tier : tiers) {
             for (String factory : mekanismFactories) {
                 assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
-                        "mekanism", "basic_" + factory + "_factory");
+                        "mekanism", singleMekanismMachine(factory));
             }
             for (String factory : moreMachineFactories) {
-                assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
-                        "mekmm", "basic_" + factory + "_factory");
+                if (factory.equals("oxidizing")) {
+                    assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
+                            "mekanism", "chemical_oxidizer");
+                } else {
+                    assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
+                            "mekmm", singleMekmmMachine(factory));
+                }
             }
         }
+    }
+
+    @Test
+    void mapsMekmmFactoriesToSingleBlockMachines() {
+        assertEquals(id("mekanism", "chemical_oxidizer"),
+                ClientRecipeMachineResolver.catalystAlias(id("mekmm", "advanced_oxidizing_factory")));
+        assertEquals(id("mekmm", "cnc_lathe"),
+                ClientRecipeMachineResolver.catalystAlias(id("mekmm", "ultimate_lathing_factory")));
+    }
+
+    private static String singleMekanismMachine(String factory) {
+        return switch (factory) {
+            case "combining" -> "combiner";
+            case "compressing" -> "osmium_compressor";
+            case "crushing" -> "crusher";
+            case "enriching" -> "enrichment_chamber";
+            case "infusing" -> "metallurgic_infuser";
+            case "injecting" -> "chemical_infuser";
+            case "purifying" -> "purification_chamber";
+            case "sawing" -> "sawmill";
+            case "smelting" -> "energized_smelter";
+            default -> throw new AssertionError(factory);
+        };
+    }
+
+    private static String singleMekmmMachine(String factory) {
+        return switch (factory) {
+            case "centrifuging" -> "centrifuge";
+            case "crystallizing" -> "crystallizer";
+            case "dissolving" -> "dissolver";
+            case "lathing" -> "cnc_lathe";
+            case "liquifying" -> "liquifier";
+            case "oxidizing" -> "oxidizer";
+            case "painting" -> "painter";
+            case "pigment_extracting" -> "pigment_extractor";
+            case "planting" -> "planter";
+            case "pressurised_reacting" -> "pressurized_reaction_chamber";
+            case "recycling" -> "recycler";
+            case "replicating" -> "replicator";
+            case "rolling_mill" -> "cnc_rolling_mill";
+            case "stamping" -> "stamper";
+            case "washing" -> "washer";
+            default -> throw new AssertionError(factory);
+        };
     }
 
     @Test

@@ -9,6 +9,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.NotNull;
 
 /** Server-authoritative editor for the network's default route policy. */
 public final class TianshuRoutingMenu extends AEBaseMenu {
@@ -109,7 +110,7 @@ public final class TianshuRoutingMenu extends AEBaseMenu {
     }
 
     @Override
-    public ItemStack quickMoveStack(Player player, int index) {
+    public @NotNull ItemStack quickMoveStack(Player player, int index) {
         return ItemStack.EMPTY;
     }
 
@@ -128,7 +129,7 @@ public final class TianshuRoutingMenu extends AEBaseMenu {
     }
 
     private static int packDirection(int direction, int shift) {
-        return (Math.max(-1, Math.min(1, direction)) + 1) << shift;
+        return (Math.clamp(direction, -1, 1) + 1) << shift;
     }
 
     private static int unpackDirection(int flags, int shift) {

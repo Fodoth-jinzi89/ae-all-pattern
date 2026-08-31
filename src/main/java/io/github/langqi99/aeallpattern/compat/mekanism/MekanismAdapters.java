@@ -17,10 +17,10 @@ public final class MekanismAdapters {
         MachineAdapterRegistry.register(new MekanismItemToItemAdapter(
                 "smelting", "energized_smelter", "smelting_factory"));
         MachineAdapterRegistry.register(new MekanismItemToItemAdapter(
-                "crushing", MekanismRecipeTypes.TYPE_CRUSHING::get,
+                "crushing", MekanismRecipeTypes.TYPE_CRUSHING,
                 "crusher", "crushing_factory"));
         MachineAdapterRegistry.register(new MekanismItemToItemAdapter(
-                "enriching", MekanismRecipeTypes.TYPE_ENRICHING::get,
+                "enriching", MekanismRecipeTypes.TYPE_ENRICHING,
                 "enrichment_chamber", "enriching_factory"));
         if (ModList.get().isLoaded("mekmm")) {
             MachineAdapterRegistry.register(new MekanismItemToItemAdapter(
@@ -32,7 +32,7 @@ public final class MekanismAdapters {
         }
     }
 
-    @SuppressWarnings({"unchecked", "deprecation"})
+    @SuppressWarnings({"unchecked"})
     private static RecipeType<ItemStackToItemStackRecipe> recipeType(String path) {
         return (RecipeType<ItemStackToItemStackRecipe>) (RecipeType<?>) BuiltInRegistries.RECIPE_TYPE.get(
                 ResourceLocation.fromNamespaceAndPath("mekanism", path));

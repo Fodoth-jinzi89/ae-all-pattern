@@ -17,6 +17,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.Level;
 
 /** One logical recipe input whose alternatives are OR choices, never separate recipes. */
+@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public record AggregateInputSlot(
         List<GenericStack> alternatives,
         Optional<ResourceLocation> itemTag) {

@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -14,6 +15,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.minecraft.server.level.ServerLevel;
 import io.github.langqi99.aeallpattern.diagnostics.PerformanceMetrics;
+import org.jetbrains.annotations.NotNull;
 
 /** Generation-aware shared recipe cache. It never retains a level or block entity. */
 public final class RecipeIndexService {
@@ -48,14 +50,14 @@ public final class RecipeIndexService {
     public static void addReloadListener(AddReloadListenerEvent event) {
         event.addListener(new PreparableReloadListener() {
             @Override
-            public CompletableFuture<Void> reload(
-                    PreparationBarrier barrier,
-                    ResourceManager resources,
-                    ProfilerFiller preparationProfiler,
-                    ProfilerFiller reloadProfiler,
-                    java.util.concurrent.Executor backgroundExecutor,
-                    java.util.concurrent.Executor gameExecutor) {
-                return barrier.wait(null).thenRunAsync(RecipeIndexService::invalidate, gameExecutor);
+            public @NotNull CompletableFuture<Void> reload(
+                    @NotNull PreparationBarrier barrier,
+                    @NotNull ResourceManager resources,
+                    @NotNull ProfilerFiller preparationProfiler,
+                    @NotNull ProfilerFiller reloadProfiler,
+                    @NotNull Executor backgroundExecutor,
+                    @NotNull Executor gameExecutor) {
+                return barrier.wait(Boolean.FALSE).thenRunAsync(RecipeIndexService::invalidate, gameExecutor);
             }
         });
     }

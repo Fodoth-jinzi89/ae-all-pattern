@@ -149,8 +149,12 @@ public final class ClientEvents {
     }
 
     private static AABB blockBounds(Minecraft minecraft, BindingRenderEntry binding) {
-        var state = minecraft.level.getBlockState(binding.pos());
-        var shape = state.getShape(minecraft.level, binding.pos());
+        var level = minecraft.level;
+        if (level == null) {
+            return new AABB(binding.pos());
+        }
+        var state = level.getBlockState(binding.pos());
+        var shape = state.getShape(level, binding.pos());
         return (shape.isEmpty() ? new AABB(binding.pos()) : shape.bounds().move(binding.pos()));
     }
 }

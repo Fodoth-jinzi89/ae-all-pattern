@@ -24,6 +24,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.NotNull;
 
 /** Server-authoritative two-step binding tool. */
+@SuppressWarnings("deprecation")
 public final class PatternBinderItem extends Item {
     public PatternBinderItem(Properties properties) {
         super(properties);

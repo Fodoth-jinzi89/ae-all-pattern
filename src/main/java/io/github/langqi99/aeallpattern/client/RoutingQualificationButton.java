@@ -45,6 +45,7 @@ public final class RoutingQualificationButton extends AbstractWidget implements 
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onClick(double mouseX, double mouseY) {
         change.accept(!enabled.get());
     }

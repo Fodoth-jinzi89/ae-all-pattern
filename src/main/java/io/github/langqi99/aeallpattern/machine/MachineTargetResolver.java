@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
 /** Resolves proxy blocks to the machine controller that owns their capabilities. */
+@SuppressWarnings("deprecation")
 public final class MachineTargetResolver {
     private static final String MEKANISM_BOUNDING_TILE = "mekanism.common.tile.TileEntityBoundingBlock";
 

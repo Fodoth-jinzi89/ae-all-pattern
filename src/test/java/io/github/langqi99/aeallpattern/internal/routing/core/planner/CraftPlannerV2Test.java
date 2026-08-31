@@ -1162,7 +1162,7 @@ class CraftPlannerV2Test {
 
         CraftPlan<String> plan = CraftPlannerV2.plan(graph, "product", 1);
 
-        assertTrue(plan.feasible(), () -> plan.toString());
+        assertTrue(plan.feasible(), plan::toString);
         assertEquals(1L, plan.usedStock().get("raw"));
         assertEquals(1L, firingsOf(plan, makeSeed));
         assertEquals(1L, firingsOf(plan, catalyzed));
@@ -2261,7 +2261,7 @@ class CraftPlannerV2Test {
         int work = CraftPlannerV2.reachableWorkEstimate(graph, "N0");
         int budget = CraftPlannerV2.scaledSearchWorkBudget(graph, "N0");
         int log = 32 - Integer.numberOfLeadingZeros(work);
-        long expected = Math.min(
+        @SuppressWarnings("MathClampMigration") long expected = Math.min(
                 CraftPlannerV2.DEFAULT_SEARCH_WORK_BUDGET,
                 Math.max(4_096L, (long) work * (log + 4L)));
 
@@ -2437,7 +2437,7 @@ class CraftPlannerV2Test {
         assertEquals(one.itemsProcessed(), billion.itemsProcessed(),
                 "request magnitude must not multiply equivalent branch expansion");
         assertEquals(1_000_000_000L, billion.missing().get("E"));
-        assertEquals(1_000_000_000L, firingsOf(billion, alternatives.get(0)));
+        assertEquals(1_000_000_000L, firingsOf(billion, alternatives.getFirst()));
         for (int i = 1; i < alternatives.size(); i++) {
             assertEquals(0L, firingsOf(billion, alternatives.get(i)));
         }

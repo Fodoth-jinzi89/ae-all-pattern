@@ -1,5 +1,7 @@
 package io.github.langqi99.aeallpattern.internal.routing.core.planner;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -16,15 +18,8 @@ import java.util.Objects;
  *
  * @param <K> item key type
  */
-public final class CraftPattern<K> {
-
-    private final K output;
-    private final long outputAmount;
-    private final List<CraftInput<K>> inputs;
-    private final List<CraftOutput<K>> byproducts;
-    private final Object source;
-    private final int idleProviderCount;
-    private final int providerCount;
+public record CraftPattern<K>(K output, long outputAmount, List<CraftInput<K>> inputs, List<CraftOutput<K>> byproducts,
+                              Object source, int idleProviderCount, int providerCount) {
 
     public CraftPattern(K output, long outputAmount, List<CraftInput<K>> inputs, Object source) {
         this(output, outputAmount, inputs, List.of(), source);
@@ -52,38 +47,24 @@ public final class CraftPattern<K> {
                 : Math.max(0, Math.min(idleProviderCount, this.providerCount));
     }
 
-    public K output() {
-        return output;
-    }
-
-    public long outputAmount() {
-        return outputAmount;
-    }
-
-    public List<CraftInput<K>> inputs() {
-        return inputs;
-    }
-
-    /** Extra outputs produced per firing besides the primary {@link #output()}. Empty if none. */
+    /**
+     * Extra outputs produced per firing besides the primary {@link #output()}. Empty if none.
+     */
+    @Override
     public List<CraftOutput<K>> byproducts() {
         return byproducts;
     }
 
-    /** Opaque handle to the originating recipe; may be {@code null} in tests. */
+    /**
+     * Opaque handle to the originating recipe; may be {@code null} in tests.
+     */
+    @Override
     public Object source() {
         return source;
     }
 
-    public int idleProviderCount() {
-        return idleProviderCount;
-    }
-
-    public int providerCount() {
-        return providerCount;
-    }
-
     @Override
-    public String toString() {
+    public @NotNull String toString() {
         return "CraftPattern[" + outputAmount + "x" + output + " <- " + inputs + "]";
     }
 }

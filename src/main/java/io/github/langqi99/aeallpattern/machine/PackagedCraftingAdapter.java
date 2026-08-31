@@ -389,7 +389,7 @@ final class PackagedCraftingAdapter implements MachineAdapter {
         return MACHINES.get(BuiltInRegistries.BLOCK.getKey(target.getBlockState().getBlock()));
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked", "rawtypes", "cast"})
     private static List<RecipeHolder<?>> recipes(ServerLevel level, RecipeType<?> type) {
         return (List) level.getRecipeManager().getAllRecipesFor((RecipeType) type);
     }

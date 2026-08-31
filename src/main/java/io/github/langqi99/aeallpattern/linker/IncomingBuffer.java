@@ -21,6 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 
 /** Persistent ownership boundary between AE and an external machine. */
+@SuppressWarnings("deprecation")
 public final class IncomingBuffer {
     private static final int MAX_QUEUED_CRAFTS = 64;
     private static final int MAX_RECOVERED_STACKS = 64;

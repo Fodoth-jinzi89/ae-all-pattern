@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
@@ -40,6 +41,6 @@ public final class RoutingTooltipArea extends AbstractWidget implements ITooltip
     }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput output) {
     }
 }

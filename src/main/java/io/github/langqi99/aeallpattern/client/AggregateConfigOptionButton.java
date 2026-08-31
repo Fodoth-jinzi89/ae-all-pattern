@@ -50,6 +50,7 @@ public final class AggregateConfigOptionButton extends AbstractWidget {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onClick(double mouseX, double mouseY) {
         toggle.run();
     }

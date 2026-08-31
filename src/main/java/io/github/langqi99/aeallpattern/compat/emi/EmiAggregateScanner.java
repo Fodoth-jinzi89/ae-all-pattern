@@ -118,9 +118,7 @@ public final class EmiAggregateScanner {
                 .toList();
         if (recipeInputs.isEmpty() || recipeInputs.size() > AggregateRecipe.MAX_INPUTS
                 || recipe.getOutputs().isEmpty()) return Optional.empty();
-        int limit = Math.min(
-                AggregateInputSlot.MAX_ALTERNATIVES,
-                AggregateRecipe.MAX_TOTAL_INPUT_ALTERNATIVES / recipeInputs.size());
+        int limit = AggregateInputSlot.MAX_ALTERNATIVES;
         List<AggregateInputSlot> inputs = recipeInputs.stream()
                 .map(i -> input(i, limit)).flatMap(Optional::stream).toList();
         List<ScannedOutput> scannedOutputs = recipe.getOutputs().stream()

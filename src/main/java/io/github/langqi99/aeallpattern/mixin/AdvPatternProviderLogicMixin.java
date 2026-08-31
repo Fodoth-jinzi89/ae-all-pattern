@@ -43,6 +43,7 @@ public abstract class AdvPatternProviderLogicMixin {
                             + "requestUpdate(Lappeng/api/networking/IManagedGridNode;)V",
                     shift = At.Shift.BEFORE),
             remap = false)
+    @SuppressWarnings("unchecked")
     private void aeallpattern$expandAggregatePatterns(CallbackInfo callback) {
         try {
             Object self = this;
