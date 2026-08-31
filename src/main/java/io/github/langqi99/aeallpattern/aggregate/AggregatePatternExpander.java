@@ -8,17 +8,23 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.blockentity.crafting.IMolecularAssemblerSupportedPattern;
 import io.github.langqi99.aeallpattern.AeAllPattern;
+import io.github.langqi99.aeallpattern.recipe.RecipeIndexService;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.function.Predicate;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -39,40 +45,316 @@ public final class AggregatePatternExpander {
     static final TagKey<Item> PROCESSING_CATALYSTS = TagKey.create(
             Registries.ITEM, ResourceLocation.fromNamespaceAndPath("aeallpattern", "processing_catalysts"));
 
+    /**
+     * Expanding one child costs an encode+decode round trip through encoded pattern NBT, so a
+     * large aggregate would otherwise re-do thousands of those on every provider refresh, for
+     * every provider. Expanded details are immutable and shareable, so cache them server-wide
+     * keyed by everything the result can depend on. The cap is generous so multi-thousand
+     * recipe aggregates (e.g. 18k patterns) survive the whole session without eviction: an
+     * evicted aggregate would re-expand everything on the next terminal open and stall the
+     * server again.
+     */
+    private static final int CACHE_MAX_ENTRIES = 256;
+    private static final Map<MinecraftServer, LinkedHashMap<CacheKey, List<IPatternDetails>>> EXPANSION_CACHE =
+            new WeakHashMap<>();
+
+    /**
+     * Single-child cache used by {@link #expandRecipe}. Live linker providers re-expand every
+     * child on every refresh, so without this a 2000-recipe machine would re-do the whole
+     * encode+decode round trip each time. Keyed by everything the result can depend on:
+     * the virtual id prefix (caller), the recipe, the option flags and the recipe generation.
+     * Sized well above any realistic aggregate recipe count (18k+ is common in kitchen-sink
+     * packs) so a full expansion stays cached instead of thrashing.
+     */
+    private static final int RECIPE_CACHE_MAX_ENTRIES = 200_000;
+    private static final Map<MinecraftServer, LinkedHashMap<RecipeCacheKey, IPatternDetails>> RECIPE_EXPANSION_CACHE =
+            new WeakHashMap<>();
+
+    /**
+     * Cold expansions run across server ticks with a small budget per tick so a multi-thousand
+     * recipe aggregate never freezes the server thread. Only the provider-facing path uses this;
+     * tests and decoders keep the synchronous {@link #expand}.
+     */
+    private static final long SCHEDULED_BUDGET_NANOS = 2_000_000L;
+    private static final int SCHEDULED_MAX_STEPS_PER_TICK = 256;
+    private static final int MAX_PENDING_JOBS = 4;
+    private static final Map<MinecraftServer, List<PendingExpansion>> PENDING = new WeakHashMap<>();
+
+    /** True in GameTest runs: the scheduled path then behaves like the synchronous one. */
+    private static volatile boolean synchronousMode;
+
+    private record CacheKey(
+            UUID libraryId, long recipeGeneration, String contentHash, int recipeCount,
+            int optionsFlags, int selectionHash) {
+    }
+
+    /** Key for the per-child cache: the caller's virtual id prefix plus the recipe identity. */
+    private record RecipeCacheKey(String prefix, String patternId, int optionsFlags, long generation) {
+    }
+
+    /** Resolved inputs of one expansion request, shared by both paths. */
+    private record ExpansionContext(
+            AggregatePatternRef ref,
+            net.minecraft.server.level.ServerLevel level,
+            List<AggregateRecipe> recipes,
+            AggregatePatternOptions options,
+            AggregatePatternSelection selection,
+            CacheKey key,
+            Map<CacheKey, List<IPatternDetails>> cache) {
+    }
+
+    private static final class PendingExpansion {
+        final CacheKey key;
+        final long recipeGeneration;
+        final net.minecraft.server.level.ServerLevel level;
+        final AggregatePatternOptions options;
+        final AggregatePatternSelection selection;
+        final List<AggregateRecipe> recipes;
+        final List<IPatternDetails> partial = new ArrayList<>();
+        final List<Runnable> completionCallbacks = new ArrayList<>();
+        int cursor;
+
+        PendingExpansion(ExpansionContext context) {
+            this.key = context.key();
+            this.recipeGeneration = RecipeIndexService.generation();
+            this.level = context.level();
+            this.options = context.options();
+            this.selection = context.selection();
+            this.recipes = context.recipes();
+        }
+    }
+
     private AggregatePatternExpander() {
     }
 
-    public static List<IPatternDetails> expand(ItemStack aggregateStack, Level level) {
+    /** Drops every cached expansion; called when the recipe datapack generation advances. */
+    public static void clearCaches() {
+        EXPANSION_CACHE.clear();
+        RECIPE_EXPANSION_CACHE.clear();
+    }
+
+    /** GameTest hook: forces the scheduled path to complete synchronously. */
+    public static void setSynchronous(boolean value) {
+        synchronousMode = value;
+    }
+
+    public static boolean isSynchronous() {
+        return synchronousMode;
+    }
+
+    private static ExpansionContext resolveContext(ItemStack aggregateStack, Level level) {
         AggregatePatternRef ref = aggregateStack.get(ModDataComponents.AGGREGATE_PATTERN.get());
         if (!aggregateStack.is(ModItems.AGGREGATE_PATTERN.get()) || ref == null
                 || !(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
-            return List.of();
+            return null;
         }
-
-        List<AggregateRecipe> recipes = AggregatePatternLibrary.get(serverLevel.getServer())
-                .recipes(serverLevel.getServer(), ref.libraryId()).orElse(List.of());
+        MinecraftServer server = serverLevel.getServer();
+        List<AggregateRecipe> recipes = AggregatePatternLibrary.get(server)
+                .recipes(server, ref.libraryId()).orElse(List.of());
         AggregatePatternOptions savedOptions =
                 aggregateStack.get(ModDataComponents.AGGREGATE_PATTERN_OPTIONS.get());
         AggregatePatternOptions options = savedOptions == null ? AggregatePatternOptions.DEFAULT : savedOptions;
+        AggregatePatternSelection selection =
+                aggregateStack.get(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get());
 
-        List<IPatternDetails> expanded = new ArrayList<>(recipes.size());
-        for (AggregateRecipe recipe : recipes) {
-            try {
-                IPatternDetails details = expandRecipe(
-                        recipe, options, serverLevel, "aggregate:" + recipe.patternId());
-                if (details != null) {
-                    expanded.add(details);
-                }
-            } catch (RuntimeException error) {
-                AeAllPattern.LOGGER.debug(
-                        "Failed to expand aggregate child {} as {}", recipe.recipeId(), recipe.kind(), error);
+        int selectionHash = selection == null || selection.isAllEnabled() ? 0 : selection.hashCode();
+        CacheKey key = new CacheKey(
+                ref.libraryId(), RecipeIndexService.generation(),
+                AggregatePatternLibrary.get(server).find(ref.libraryId())
+                        .map(AggregatePatternLibrary.Entry::contentHash).orElse("missing"),
+                recipes.size(), options.flags(), selectionHash);
+        Map<CacheKey, List<IPatternDetails>> cache =
+                EXPANSION_CACHE.computeIfAbsent(server, ignored -> new LinkedHashMap<>(16, 0.75F, true) {
+                    @Override
+                    protected boolean removeEldestEntry(Map.Entry<CacheKey, List<IPatternDetails>> eldest) {
+                        return size() > CACHE_MAX_ENTRIES;
+                    }
+                });
+        return new ExpansionContext(ref, serverLevel, recipes, options, selection, key, cache);
+    }
+
+    /** One child expansion shared by both the synchronous and the scheduled path. */
+    private static IPatternDetails expandOne(
+            AggregateRecipe recipe,
+            AggregatePatternOptions options,
+            AggregatePatternSelection selection,
+            net.minecraft.server.level.ServerLevel level) {
+        if (selection != null && !selection.isEnabled(recipe.patternId())) {
+            return null;
+        }
+        // Folding the selection into the virtual id makes providers observe selection
+        // changes the same way they observe option-flag changes.
+        String virtualIdPrefix = "aggregate:" + recipe.patternId();
+        if (selection != null && !selection.isAllEnabled()) {
+            virtualIdPrefix += ":sel=" + Integer.toUnsignedString(selection.hashCode(), 16);
+        }
+        try {
+            return expandRecipe(recipe, options, level, virtualIdPrefix);
+        } catch (RuntimeException error) {
+            AeAllPattern.LOGGER.debug(
+                    "Failed to expand aggregate child {} as {}", recipe.recipeId(), recipe.kind(), error);
+            return null;
+        }
+    }
+
+    /**
+     * Expands only the first publishable child (cached if possible). Decoders use this instead
+     * of the full expansion so slot-validity checks never pay the cost of expanding every child.
+     */
+    public static IPatternDetails expandFirst(ItemStack aggregateStack, Level level) {
+        ExpansionContext context = resolveContext(aggregateStack, level);
+        if (context == null) {
+            return null;
+        }
+        List<IPatternDetails> cached = context.cache().get(context.key());
+        if (cached != null && !cached.isEmpty()) {
+            return cached.getFirst();
+        }
+        for (AggregateRecipe recipe : context.recipes()) {
+            IPatternDetails details = expandOne(recipe, context.options(), context.selection(), context.level());
+            if (details != null) {
+                return details;
             }
         }
-        return List.copyOf(expanded);
+        return null;
+    }
+
+    public static List<IPatternDetails> expand(ItemStack aggregateStack, Level level) {
+        ExpansionContext context = resolveContext(aggregateStack, level);
+        if (context == null) {
+            return List.of();
+        }
+        List<IPatternDetails> cached = context.cache().get(context.key());
+        if (cached != null) {
+            return cached;
+        }
+
+        List<IPatternDetails> expanded = new ArrayList<>(context.recipes().size());
+        for (AggregateRecipe recipe : context.recipes()) {
+            IPatternDetails details = expandOne(recipe, context.options(), context.selection(), context.level());
+            if (details != null) {
+                expanded.add(details);
+            }
+        }
+        List<IPatternDetails> frozen = List.copyOf(expanded);
+        context.cache().put(context.key(), frozen);
+        return frozen;
+    }
+
+    /**
+     * Provider-facing expansion. Returns whatever children are published right now; a cold
+     * expansion is spread over the following ticks with a tiny per-tick budget, and the given
+     * callback re-runs the provider refresh once the complete list is ready. The synchronous
+     * {@link #expand} path (and GameTest mode) keeps full immediacy.
+     */
+    public static List<IPatternDetails> expandScheduled(
+            ItemStack aggregateStack, Level level, Runnable onCompletion) {
+        ExpansionContext context = resolveContext(aggregateStack, level);
+        if (context == null) {
+            return List.of();
+        }
+        List<IPatternDetails> cached = context.cache().get(context.key());
+        if (cached != null) {
+            return cached;
+        }
+        if (synchronousMode) {
+            return expand(aggregateStack, level);
+        }
+
+        MinecraftServer server = context.level().getServer();
+        List<PendingExpansion> jobs = PENDING.computeIfAbsent(server, ignored -> new ArrayList<>());
+        for (PendingExpansion job : jobs) {
+            if (job.key.equals(context.key())) {
+                if (onCompletion != null && job.completionCallbacks.size() < 16) {
+                    job.completionCallbacks.add(onCompletion);
+                }
+                return List.copyOf(job.partial);
+            }
+        }
+        PendingExpansion job = new PendingExpansion(context);
+        if (onCompletion != null) {
+            job.completionCallbacks.add(onCompletion);
+        }
+        while (jobs.size() >= MAX_PENDING_JOBS) {
+            jobs.removeFirst();
+        }
+        jobs.add(job);
+        return List.copyOf(job.partial);
+    }
+
+    /** Advances every pending scheduled expansion within the per-tick budget. Server thread only. */
+    public static void tickServer(MinecraftServer server) {
+        List<PendingExpansion> jobs = PENDING.get(server);
+        if (jobs == null || jobs.isEmpty()) {
+            return;
+        }
+        long deadline = System.nanoTime() + SCHEDULED_BUDGET_NANOS;
+        java.util.Iterator<PendingExpansion> iterator = jobs.iterator();
+        while (iterator.hasNext()) {
+            PendingExpansion job = iterator.next();
+            if (job.recipeGeneration != RecipeIndexService.generation()) {
+                iterator.remove();
+                continue;
+            }
+            int steps = 0;
+            while (job.cursor < job.recipes.size() && steps < SCHEDULED_MAX_STEPS_PER_TICK) {
+                AggregateRecipe recipe = job.recipes.get(job.cursor++);
+                steps++;
+                IPatternDetails details = expandOne(recipe, job.options, job.selection, job.level);
+                if (details != null) {
+                    job.partial.add(details);
+                }
+                if (System.nanoTime() >= deadline) {
+                    return;
+                }
+            }
+            if (job.cursor >= job.recipes.size()) {
+                List<IPatternDetails> frozen = List.copyOf(job.partial);
+                EXPANSION_CACHE.computeIfAbsent(server, ignored -> new LinkedHashMap<>(16, 0.75F, true) {
+                    @Override
+                    protected boolean removeEldestEntry(Map.Entry<CacheKey, List<IPatternDetails>> eldest) {
+                        return size() > CACHE_MAX_ENTRIES;
+                    }
+                }).put(job.key, frozen);
+                iterator.remove();
+                for (Runnable callback : job.completionCallbacks) {
+                    try {
+                        callback.run();
+                    } catch (RuntimeException error) {
+                        AeAllPattern.LOGGER.debug("Aggregate expansion completion callback failed", error);
+                    }
+                }
+            }
+        }
     }
 
     /** Shared child-pattern path used by aggregate items and live linker providers. */
     public static IPatternDetails expandRecipe(
+            AggregateRecipe recipe,
+            AggregatePatternOptions options,
+            net.minecraft.server.level.ServerLevel level,
+            String virtualIdPrefix) {
+        Map<RecipeCacheKey, IPatternDetails> cache =
+                RECIPE_EXPANSION_CACHE.computeIfAbsent(level.getServer(), ignored -> new LinkedHashMap<>(256, 0.75F, true) {
+                    @Override
+                    protected boolean removeEldestEntry(Map.Entry<RecipeCacheKey, IPatternDetails> eldest) {
+                        return size() > RECIPE_CACHE_MAX_ENTRIES;
+                    }
+                });
+        RecipeCacheKey key = new RecipeCacheKey(
+                virtualIdPrefix, recipe.patternId(), options.flags(), RecipeIndexService.generation());
+        IPatternDetails cached = cache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        IPatternDetails expanded = expandRecipeUncached(recipe, options, level, virtualIdPrefix);
+        if (expanded != null) {
+            cache.put(key, expanded);
+        }
+        return expanded;
+    }
+
+    private static IPatternDetails expandRecipeUncached(
             AggregateRecipe recipe,
             AggregatePatternOptions options,
             net.minecraft.server.level.ServerLevel level,

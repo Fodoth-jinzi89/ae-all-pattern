@@ -3,6 +3,7 @@ package io.github.langqi99.aeallpattern.registry;
 import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingMenu;
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternConfigMenu;
+import io.github.langqi99.aeallpattern.aggregate.AggregatePatternSelectionMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -19,6 +20,9 @@ public final class ModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<AggregatePatternConfigMenu>> AGGREGATE_PATTERN_CONFIG =
             MENUS.register("aggregate_pattern_config", () ->
                     IMenuTypeExtension.create(AggregatePatternConfigMenu::new));
+    public static final DeferredHolder<MenuType<?>, MenuType<AggregatePatternSelectionMenu>> AGGREGATE_PATTERN_SELECTION =
+            MENUS.register("aggregate_pattern_selection", () ->
+                    IMenuTypeExtension.create(AggregatePatternSelectionMenu::new));
 
     private ModMenus() {
     }

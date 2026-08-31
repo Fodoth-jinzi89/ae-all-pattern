@@ -55,9 +55,6 @@ class ClientRecipeMachineResolverTest {
                         "mekanism", "basic_" + factory + "_factory");
             }
             for (String factory : moreMachineFactories) {
-                if (factory.equals("oxidizing")) {
-                    continue;
-                }
                 assertAlias("mekanism_extras", tier + "_" + factory + "_factory",
                         "mekmm", "basic_" + factory + "_factory");
             }
@@ -68,19 +65,6 @@ class ClientRecipeMachineResolverTest {
     void leavesOrdinaryMachinesUnchanged() {
         ResourceLocation id = id("mekmm", "large_chemical_infuser");
         assertEquals(id, ClientRecipeMachineResolver.catalystAlias(id));
-    }
-
-    @Test
-    void mapsOxidizingFactoriesToTheSingleBlockChemicalOxidizer() {
-        String[] extrasTiers = {"absolute", "supreme", "cosmic", "infinite"};
-        for (String tier : extrasTiers) {
-            assertAlias("mekanism_extras", tier + "_oxidizing_factory", "mekanism", "chemical_oxidizer");
-            assertAlias("mekanism_extras", tier + "_chemical_oxidizing_factory", "mekanism", "chemical_oxidizer");
-        }
-        String[] mekmmTiers = {"basic", "advanced", "elite", "ultimate", "dense", "overclocked", "quantum", "multiversal", "creative"};
-        for (String tier : mekmmTiers) {
-            assertAlias("mekmm", tier + "_oxidizing_factory", "mekanism", "chemical_oxidizer");
-        }
     }
 
     private static void assertAlias(

@@ -33,13 +33,19 @@ public final class AggregatePatternDecoder implements IPatternDetailsDecoder {
         if (!isEncodedPattern(stack)) {
             return null;
         }
-        // Decoding happens synchronously while pattern inventories validate and rebuild.
-        // Never expand the aggregate here: large aggregates can contain thousands of recipes,
-        // and providers expand them at their catalog boundary immediately afterwards.
+        // Only the first child is needed for a marker: expanding every child here would make
+        // slot-validity checks pay the full aggregate cost on every decode (thousands of
+        // recipes), which caused "cannot insert when all selected" timeouts on addon hosts.
+        IPatternDetails first = AggregatePatternExpander.expandFirst(stack, level);
+        if (first != null) {
+            return new AggregatePatternMarkerDetails(key, first);
+        }
+        // Nothing is published right now (e.g. every child was deselected). The stand-in keeps
+        // the item valid inside pattern slots; it is flagged so providers never publish it.
         ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
                 java.util.List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE))),
                 java.util.List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.STONE))));
-        IPatternDetails placeholder = PatternDetailsHelper.decodePattern(encoded, level);
-        return placeholder == null ? null : new AggregatePatternMarkerDetails(key, placeholder);
+        IPatternDetails standIn = encoded.isEmpty() ? null : PatternDetailsHelper.decodePattern(encoded, level);
+        return standIn == null ? null : new AggregatePatternMarkerDetails(key, standIn, true);
     }
 }

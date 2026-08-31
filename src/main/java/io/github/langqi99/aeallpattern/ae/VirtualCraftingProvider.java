@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -34,6 +35,7 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
     private Map<VirtualPatternDetails, PatternRoute> routes = Map.of();
     private long catalogGeneration;
     private boolean lastAvailable;
+    private RefreshJob refreshJob;
 
     public VirtualCraftingProvider(PatternLinkerBlockEntity linker, IncomingBuffer buffer) {
         this.linker = linker;
@@ -81,7 +83,10 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
 
     @Override
     public boolean isBusy() {
-        return routes.isEmpty() || !buffer.hasCapacity();
+        if (routes.isEmpty()) {
+            return true;
+        }
+        return routes.values().stream().allMatch(route -> buffer.hasWork(route.binding.bindingId()));
     }
 
     public long catalogGeneration() {
@@ -89,16 +94,46 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
     }
 
     public void refresh() {
+        if (!(linker.getLevel() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        if (!AggregatePatternExpander.isSynchronous()) {
+            // Live path: rebuild routes across ticks so a linker bound to a multi-thousand
+            // recipe machine never stalls the server thread. GameTest keeps the synchronous
+            // contract via refreshSync().
+            RefreshJob job = refreshJob;
+            if (job == null || job.generation != RecipeIndexService.generation()) {
+                refreshJob = new RefreshJob(linker, serverLevel);
+            }
+            return;
+        }
+        refreshSync();
+    }
+
+    /** Advances the cross-tick rebuild, if any; called from the linker's server tick. */
+    public void tickRefresh() {
+        RefreshJob job = refreshJob;
+        if (job == null) {
+            return;
+        }
+        if (job.generation != RecipeIndexService.generation()) {
+            refreshJob = null;
+            return;
+        }
+        if (job.advance()) {
+            refreshJob = null;
+            commit(job.rebuilt());
+        }
+    }
+
+    private void refreshSync() {
         if (!(linker.getLevel() instanceof ServerLevel linkerLevel)) {
             return;
         }
         Map<VirtualPatternDetails, PatternRoute> rebuilt = new LinkedHashMap<>();
         var anchor = linker.getGlobalPos();
         AggregatePatternOptions options = linker.getPatternOptions();
-        List<BindingRecord> bindings = BindingSavedData.get(linkerLevel.getServer()).all().stream()
-                .filter(binding -> binding.anchor().equals(anchor))
-                .sorted(java.util.Comparator.comparing(BindingRecord::bindingId))
-                .toList();
+        List<BindingRecord> bindings = BindingSavedData.get(linkerLevel.getServer()).byAnchor(anchor);
         for (BindingRecord binding : bindings) {
             ServerLevel targetLevel = linkerLevel.getServer().getLevel(binding.target().dimension());
             if (targetLevel == null || !targetLevel.hasChunkAt(binding.target().pos())) {
@@ -135,7 +170,10 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
                 rebuilt.put(details, new PatternRoute(binding, recipe));
             }
         }
+        commit(rebuilt);
+    }
 
+    private void commit(Map<VirtualPatternDetails, PatternRoute> rebuilt) {
         Set<BindingPatternKey> oldKeys = routes.keySet().stream().map(VirtualPatternDetails::key).collect(java.util.stream.Collectors.toSet());
         Set<BindingPatternKey> newKeys = rebuilt.keySet().stream().map(VirtualPatternDetails::key).collect(java.util.stream.Collectors.toSet());
         routes = Map.copyOf(rebuilt);
@@ -214,5 +252,108 @@ public final class VirtualCraftingProvider implements ICraftingProvider {
     }
 
     private record PatternRoute(BindingRecord binding, RecipeSnapshot recipe) {
+    }
+
+    /**
+     * Cross-tick rebuild of the route table. The linker keeps publishing the previous route
+     * table while this runs, and the completed table is swapped in atomically so AE2 never
+     * observes a half-built provider.
+     */
+    private static final class RefreshJob {
+        private static final long BUDGET_NANOS = 2_000_000L;
+        private static final int MAX_STEPS_PER_TICK = 128;
+
+        private final long generation;
+        private final ServerLevel linkerLevel;
+        private final GlobalPos anchor;
+        private final AggregatePatternOptions options;
+        private final List<BindingRecord> bindings;
+        private final Map<VirtualPatternDetails, PatternRoute> rebuilt = new LinkedHashMap<>();
+        private int bindingCursor;
+        private boolean bindingLoaded;
+        private List<RecipeSnapshot> currentCatalog = List.of();
+        private int recipeCursor;
+
+        private RefreshJob(PatternLinkerBlockEntity linker, ServerLevel linkerLevel) {
+            this.generation = RecipeIndexService.generation();
+            this.linkerLevel = linkerLevel;
+            this.anchor = linker.getGlobalPos();
+            this.options = linker.getPatternOptions();
+            this.bindings = BindingSavedData.get(linkerLevel.getServer()).byAnchor(anchor);
+        }
+
+        private Map<VirtualPatternDetails, PatternRoute> rebuilt() {
+            return rebuilt;
+        }
+
+        /** Returns true once every binding has been expanded. */
+        private boolean advance() {
+            long deadline = System.nanoTime() + BUDGET_NANOS;
+            while (bindingCursor < bindings.size()) {
+                BindingRecord binding = bindings.get(bindingCursor);
+                if (!bindingLoaded && !loadBinding(binding)) {
+                    bindingCursor++;
+                    continue;
+                }
+                int steps = 0;
+                while (recipeCursor < currentCatalog.size()) {
+                    RecipeSnapshot recipe = currentCatalog.get(recipeCursor++);
+                    steps++;
+                    BindingPatternKey patternKey =
+                            new BindingPatternKey(binding.bindingId(), recipe.fingerprint());
+                    AggregateRecipe aggregateRecipe = AggregateRecipe.from(recipe);
+                    IPatternDetails processed = AggregatePatternExpander.expandRecipe(
+                            aggregateRecipe,
+                            options,
+                            linkerLevel,
+                            "linker:" + binding.bindingId() + ":" + recipe.fingerprint().stableKey());
+                    if (processed != null) {
+                        rebuilt.put(
+                                new VirtualPatternDetails(patternKey, processed),
+                                new PatternRoute(binding, recipe));
+                    }
+                    if (steps >= MAX_STEPS_PER_TICK || System.nanoTime() >= deadline) {
+                        if (recipeCursor >= currentCatalog.size()) {
+                            finishBinding();
+                        }
+                        return false;
+                    }
+                }
+                finishBinding();
+            }
+            return true;
+        }
+
+        private boolean loadBinding(BindingRecord binding) {
+            ServerLevel targetLevel = linkerLevel.getServer().getLevel(binding.target().dimension());
+            if (targetLevel == null || !targetLevel.hasChunkAt(binding.target().pos())) {
+                return false;
+            }
+            BlockEntity target = targetLevel.getBlockEntity(binding.target().pos());
+            if (target == null || !binding.targetFingerprint().equals(BlockEntityFingerprint.of(target))) {
+                return false;
+            }
+            ResourceLocation adapterId = ResourceLocation.tryParse(binding.adapterId());
+            if (adapterId == null) {
+                return false;
+            }
+            var adapter = MachineAdapterRegistry.byId(adapterId)
+                    .filter(candidate -> candidate.schemaVersion() == binding.adapterSchema())
+                    .filter(candidate -> candidate.supports(targetLevel, target));
+            if (adapter.isEmpty()) {
+                return false;
+            }
+            currentCatalog = RecipeIndexService.catalog(targetLevel, target, adapter.get()).recipes();
+            recipeCursor = 0;
+            bindingLoaded = true;
+            return true;
+        }
+
+        private void finishBinding() {
+            bindingCursor++;
+            bindingLoaded = false;
+            currentCatalog = List.of();
+            recipeCursor = 0;
+        }
     }
 }

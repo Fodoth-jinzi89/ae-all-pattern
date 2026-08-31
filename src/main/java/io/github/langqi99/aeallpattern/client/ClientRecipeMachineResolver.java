@@ -26,6 +26,7 @@ public final class ClientRecipeMachineResolver {
             factoryAlias("dissolving_factory", "mekmm", "basic_dissolving_factory"),
             factoryAlias("lathing_factory", "mekmm", "basic_lathing_factory"),
             factoryAlias("liquifying_factory", "mekmm", "basic_liquifying_factory"),
+            factoryAlias("oxidizing_factory", "mekmm", "basic_oxidizing_factory"),
             factoryAlias("painting_factory", "mekmm", "basic_painting_factory"),
             factoryAlias("pigment_extracting_factory", "mekmm", "basic_pigment_extracting_factory"),
             factoryAlias("planting_factory", "mekmm", "basic_planting_factory"),
@@ -72,11 +73,6 @@ public final class ClientRecipeMachineResolver {
     }
 
     static ResourceLocation catalystAlias(ResourceLocation blockId) {
-        if ((blockId.getNamespace().equals("mekanism_extras") || blockId.getNamespace().equals("mekmm"))
-                && (blockId.getPath().endsWith("_oxidizing_factory")
-                        || blockId.getPath().endsWith("_chemical_oxidizing_factory"))) {
-            return id("mekanism", "chemical_oxidizer");
-        }
         ResourceLocation alias = CATALYST_ALIASES.get(blockId);
         if (alias != null || !blockId.getNamespace().equals("mekanism_extras")) {
             return alias == null ? blockId : alias;

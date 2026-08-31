@@ -40,6 +40,17 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
         return definition;
     }
 
+    /**
+     * The AE2 pattern this aggregate child was expanded into.
+     *
+     * <p>Addon tools that inspect patterns by concrete type (Advanced AE's pattern encoder only
+     * understands {@code AEProcessingPattern} and {@code AdvProcessingPattern}) need to look
+     * through the wrapper to recognise an aggregate child.</p>
+     */
+    public IPatternDetails delegate() {
+        return delegate;
+    }
+
     @Override
     public IInput[] getInputs() {
         return configuredInputs == null ? delegate.getInputs() : configuredInputs;

@@ -16,6 +16,10 @@
     "PackagedAutoPackagingProviderItemHandlerMixin",
     "ECOCraftingPatternBusBlockEntityMixin",
     "MatrixPatternStorageBlockEntityMixin",
+    "PigmeePatternProviderBlockEntityMixin",
+    "AdvPatternProviderLogicMixin",
+    "AdvPatternEncoderMenuMixin",
+    "StablePatternProviderLogicMixin",
     "OverloadedProviderPatternCatalogMixin",
     "CraftConfirmMenuMixin"
   ],

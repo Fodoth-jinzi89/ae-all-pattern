@@ -30,10 +30,12 @@ public final class ClientEvents {
         NeoForge.EVENT_BUS.addListener(ClientEvents::renderBindings);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onLogout);
         NeoForge.EVENT_BUS.addListener(ClientJeiAggregateScanner::onRightClickBlock);
+        NeoForge.EVENT_BUS.addListener(ClientJeiAggregateScanner::onClientTick);
     }
 
     public static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenus.AGGREGATE_PATTERN_CONFIG.get(), AggregatePatternConfigScreen::new);
+        event.register(ModMenus.AGGREGATE_PATTERN_SELECTION.get(), AggregatePatternSelectionScreen::new);
         InitScreens.register(
                 event,
                 ModMenus.TIANSHU_ROUTING.get(),

@@ -19,7 +19,7 @@ import net.minecraft.world.item.ItemStack;
 
 /** Validates and assembles bounded JEI scan pages before updating the server library. */
 public final class AggregateGenerationService {
-    private static final long UPLOAD_TIMEOUT_TICKS = 20L * 30L;
+    private static final long UPLOAD_TIMEOUT_TICKS = 20L * 120L;
     private static final Map<UploadKey, Upload> UPLOADS = new HashMap<>();
 
     private AggregateGenerationService() {
@@ -65,8 +65,11 @@ public final class AggregateGenerationService {
     }
 
     private static boolean validTarget(GenerateAggregatePayload payload, ServerPlayer player) {
+        // The client scan runs across many ticks, so the player legitimately walks away from
+        // the machine while it completes. Enforce the machine identity instead of proximity:
+        // the clicked block must still be the same block, and the player must still hold the
+        // generator item.
         if (!holdsGenerator(player)
-                || player.distanceToSqr(payload.machinePos().getCenter()) > 64.0
                 || !player.level().hasChunkAt(payload.machinePos())) {
             return false;
         }

@@ -167,6 +167,7 @@ public final class PatternLinkerBlockEntity extends AENetworkedBlockEntity imple
         if (linker.craftingProvider.catalogGeneration() != RecipeIndexService.generation()) {
             linker.craftingProvider.refresh();
         }
+        linker.craftingProvider.tickRefresh();
         linker.craftingProvider.tickAvailability();
     }
 }
