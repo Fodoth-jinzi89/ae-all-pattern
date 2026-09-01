@@ -44,6 +44,11 @@ public final class AeAllPatternConfigScreen {
                 .setSaveConsumer(AeAllPatternCommonConfig.LINKER_ALLOW_CROSS_DIMENSION::set)
                 .build());
 
+        ConfigCategory selection = builder.getOrCreateCategory(Component.translatable("config.aeallpattern.pattern_selection"));
+        selection.addEntry(entries.startIntField(Component.translatable("config.aeallpattern.selection_display_limit"), AeAllPatternCommonConfig.SELECTION_DISPLAY_LIMIT.getAsInt())
+                .setDefaultValue(1024).setMin(1).setMax(16384)
+                .setTooltip(Component.translatable("config.aeallpattern.selection_display_limit.tooltip"))
+                .setSaveConsumer(AeAllPatternCommonConfig.SELECTION_DISPLAY_LIMIT::set).build());
         builder.setSavingRunnable(AeAllPatternCommonConfig.SPEC::save);
         return builder.build();
     }

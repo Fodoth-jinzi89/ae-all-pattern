@@ -3,6 +3,7 @@ package io.github.langqi99.aeallpattern.aggregate;
 import appeng.api.stacks.GenericStack;
 import io.github.langqi99.aeallpattern.network.AggregateSearchResultPayload;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
+import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import io.github.langqi99.aeallpattern.registry.ModMenus;
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ public final class AggregatePatternSelectionMenu extends AbstractContainerMenu {
     public static final int DESELECT_ALL = -2;
 
     /** Safety cap for the open-packet payload; bulk actions still cover every stored recipe. */
-    public static final int MAX_SYNCED_ENTRIES = 1024;
+    public static final int MAX_SYNCED_ENTRIES = 16384;
 
     private static final int MAX_STACKS_PER_LIST = 81;
 
@@ -67,9 +68,10 @@ public final class AggregatePatternSelectionMenu extends AbstractContainerMenu {
     }
 
     public static List<Entry> entriesFromRecipes(List<AggregateRecipe> recipes) {
-        List<Entry> entries = new ArrayList<>(Math.min(recipes.size(), MAX_SYNCED_ENTRIES));
+        int limit = Math.min(MAX_SYNCED_ENTRIES, AeAllPatternCommonConfig.SELECTION_DISPLAY_LIMIT.getAsInt());
+        List<Entry> entries = new ArrayList<>(Math.min(recipes.size(), limit));
         for (AggregateRecipe recipe : recipes) {
-            if (entries.size() >= MAX_SYNCED_ENTRIES) {
+            if (entries.size() >= limit) {
                 break;
             }
             entries.add(new Entry(

@@ -66,6 +66,13 @@ class JeiCategorySelectionTest {
     }
 
     @Test
+    void chemicalOxidizerPicksOxidizingCategory() {
+        assertEquals(id("mekanism:oxidizing"),
+                pick("mekanism:chemical_oxidizer",
+                        List.of(id("mekanism:reaction"), id("mekanism:oxidizing"))));
+    }
+
+    @Test
     void fallsBackToFirstCategoryOfTheSameNamespace() {
         // Unknown machines keep the previous behaviour instead of failing to scan at all.
         var picked = ClientJeiAggregateScanner.pickCategoryId(

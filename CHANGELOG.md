@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.21 - 2026-09-01
+
+- Fixed pure-JEI pattern generation for Mekanism's Chemical Oxidizer by mapping its machine id to the oxidizing recipe category.
+- Added a configurable aggregate-pattern picker result limit, defaulting to 1024 with a supported range of 1-16384.
+- Made aggregate-pattern searches cover the complete recipe library while limiting only the displayed results.
+- Right-aligned the result-limit notice and shortened it to "First xx results".
+- Prevented the inventory key from closing the picker while typing in its search box.
+
+## 0.1.20 - 2026-09-01
+
+- Deferred aggregate expansion callbacks to keep provider updates off the current tick and preserve compatibility with optional add-ons.
+- Restored compatibility and null-safety guards across routing, machine adapters, and client integrations.
+
 ## 0.1.19 - 2026-08-30
 
 - Let Advanced AE's advanced pattern encoder open infusing-factory aggregate patterns: the editor now sees the first selected child and can edit it.
