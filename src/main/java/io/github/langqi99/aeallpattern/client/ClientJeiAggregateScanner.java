@@ -658,6 +658,11 @@ public final class ClientJeiAggregateScanner {
                 break;
             }
         }
+        // Mekanism's standalone machine is named chemical_oxidizer while its
+        // JEI processing category is oxidizing (factories already use the latter).
+        if (keyword.equals("chemical_oxidizer") || keyword.equals("oxidizer")) {
+            return "oxidizing";
+        }
         return keyword;
     }
 

@@ -271,9 +271,11 @@ public final class AggregatePatternSelectionScreen extends AbstractContainerScre
                 searchBox.setFocused(false);
                 return true;
             }
-            if (searchBox.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
+            searchBox.keyPressed(keyCode, scanCode, modifiers);
+            // Printable keys are inserted later through charTyped, so EditBox returns false
+            // here. Still consume them to keep inventory-key bindings (normally E) from
+            // reaching AbstractContainerScreen and closing the picker while typing.
+            return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
@@ -571,10 +573,11 @@ public final class AggregatePatternSelectionScreen extends AbstractContainerScre
         if (total > menu.entries().size()) {
             Component truncated = Component.translatable(
                     "gui.aeallpattern.aggregate_selection.truncated", menu.entries().size());
+            String text = font.plainSubstrByWidth(truncated.getString(), imageWidth - 16);
             graphics.drawString(
                     font,
-                    font.plainSubstrByWidth(truncated.getString(), imageWidth - 16),
-                    8,
+                    text,
+                    imageWidth - 8 - font.width(text),
                     imageHeight - 30,
                     0xFF8A6FA8,
                     false);

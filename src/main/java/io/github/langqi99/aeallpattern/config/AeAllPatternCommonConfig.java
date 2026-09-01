@@ -6,6 +6,7 @@ public final class AeAllPatternCommonConfig {
     public static final ModConfigSpec SPEC;
     public static final ModConfigSpec.IntValue LINKER_MAX_BINDING_DISTANCE;
     public static final ModConfigSpec.BooleanValue LINKER_ALLOW_CROSS_DIMENSION;
+    public static final ModConfigSpec.IntValue SELECTION_DISPLAY_LIMIT;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -16,6 +17,9 @@ public final class AeAllPatternCommonConfig {
         LINKER_ALLOW_CROSS_DIMENSION = builder
                 .comment("Whether a linker may bind machines in another dimension. Cross-dimension bindings ignore distance.")
                 .define("allowCrossDimension", true);
+        builder.pop();
+        builder.push("patternSelection");
+        SELECTION_DISPLAY_LIMIT = builder.defineInRange("displayLimit", 1024, 1, 16384);
         builder.pop();
         SPEC = builder.build();
     }
