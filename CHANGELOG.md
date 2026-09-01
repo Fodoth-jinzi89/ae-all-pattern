@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.20 - 2026-09-01
+
+- Deferred aggregate expansion callbacks to keep provider updates off the current tick and preserve compatibility with optional add-ons.
+- Restored compatibility and null-safety guards across routing, machine adapters, and client integrations.
+
 ## 0.1.19 - 2026-08-30
 
 - Let Advanced AE's advanced pattern encoder open infusing-factory aggregate patterns: the editor now sees the first selected child and can edit it.
