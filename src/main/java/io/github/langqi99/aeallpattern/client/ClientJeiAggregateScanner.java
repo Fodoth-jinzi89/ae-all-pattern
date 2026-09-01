@@ -59,7 +59,8 @@ public final class ClientJeiAggregateScanner {
     /** Machine tier prefixes, stripped before matching a machine id against its recipe category. */
     private static final List<String> FACTORY_TIERS = List.of(
             "basic_", "advanced_", "elite_", "ultimate_",
-            "absolute_", "supreme_", "cosmic_", "infinite_");
+            "absolute_", "supreme_", "cosmic_", "infinite_",
+            "dense_", "quantum_", "overclocked_", "multiversal_", "creative_");
     /** Housing suffixes that say how the machine is shaped, not what it does. */
     private static final List<String> MACHINE_HOUSINGS = List.of(
             "_factory", "_machine", "_chamber");
@@ -663,7 +664,25 @@ public final class ClientJeiAggregateScanner {
         if (keyword.equals("chemical_oxidizer") || keyword.equals("oxidizer")) {
             return "oxidizing";
         }
-        return keyword;
+        return switch (keyword) {
+            case "combiner" -> "combining";
+            case "osmium_compressor" -> "compressing";
+            case "chemical_injection", "injecting" -> "injecting";
+            case "precision_sawmill" -> "sawing";
+            case "energized_smelter" -> "smelting";
+            case "isotopic_centrifuge" -> "centrifuging";
+            case "chemical_crystallizer" -> "crystallizing";
+            case "chemical_dissolution", "dissolving" -> "dissolution";
+            case "cnc_lathe" -> "lathing";
+            case "liquifying", "nutritional_liquifier" -> "nutritional_liquification";
+            case "pigment_extractor" -> "pigment_extracting";
+            case "planting_station" -> "planting";
+            case "pressurised_reacting", "pressurized_reaction" -> "reaction";
+            case "cnc_rolling_mill" -> "rolling_mill";
+            case "cnc_stamper" -> "stamping";
+            case "chemical_washer" -> "washing";
+            default -> keyword;
+        };
     }
 
     private static int commonPrefixLength(String left, String right) {

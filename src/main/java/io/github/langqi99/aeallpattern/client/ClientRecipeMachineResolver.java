@@ -10,33 +10,31 @@ import net.minecraft.world.level.Level;
 
 /** Resolves recipe-viewer workstations that differ from the clicked block. */
 public final class ClientRecipeMachineResolver {
-    private static final String[] MEKANISM_EXTRAS_TIERS = {"absolute_", "supreme_", "cosmic_", "infinite_"};
-    private static final String[] FACTORY_TIERS = {"basic_", "advanced_", "elite_", "ultimate_"};
     private static final Map<String, ResourceLocation> MEKANISM_EXTRAS_FACTORY_ALIASES = Map.ofEntries(
             factoryAlias("combining_factory", "mekanism", "combiner"),
             factoryAlias("compressing_factory", "mekanism", "osmium_compressor"),
             factoryAlias("crushing_factory", "mekanism", "crusher"),
             factoryAlias("enriching_factory", "mekanism", "enrichment_chamber"),
             factoryAlias("infusing_factory", "mekanism", "metallurgic_infuser"),
-            factoryAlias("injecting_factory", "mekanism", "chemical_infuser"),
+            factoryAlias("injecting_factory", "mekanism", "chemical_injection_chamber"),
             factoryAlias("purifying_factory", "mekanism", "purification_chamber"),
-            factoryAlias("sawing_factory", "mekanism", "sawmill"),
+            factoryAlias("sawing_factory", "mekanism", "precision_sawmill"),
             factoryAlias("smelting_factory", "mekanism", "energized_smelter"),
-            factoryAlias("centrifuging_factory", "mekmm", "centrifuge"),
-            factoryAlias("crystallizing_factory", "mekmm", "crystallizer"),
-            factoryAlias("dissolving_factory", "mekmm", "dissolver"),
+            factoryAlias("centrifuging_factory", "mekanism", "isotopic_centrifuge"),
+            factoryAlias("crystallizing_factory", "mekanism", "chemical_crystallizer"),
+            factoryAlias("dissolving_factory", "mekanism", "chemical_dissolution_chamber"),
             factoryAlias("lathing_factory", "mekmm", "cnc_lathe"),
-            factoryAlias("liquifying_factory", "mekmm", "liquifier"),
-            factoryAlias("oxidizing_factory", "mekmm", "oxidizer"),
-            factoryAlias("painting_factory", "mekmm", "painter"),
-            factoryAlias("pigment_extracting_factory", "mekmm", "pigment_extractor"),
-            factoryAlias("planting_factory", "mekmm", "planter"),
-            factoryAlias("pressurised_reacting_factory", "mekmm", "pressurized_reaction_chamber"),
+            factoryAlias("liquifying_factory", "mekanism", "nutritional_liquifier"),
+            factoryAlias("oxidizing_factory", "mekanism", "chemical_oxidizer"),
+            factoryAlias("painting_factory", "mekanism", "painting_machine"),
+            factoryAlias("pigment_extracting_factory", "mekanism", "pigment_extractor"),
+            factoryAlias("planting_factory", "mekmm", "planting_station"),
+            factoryAlias("pressurised_reacting_factory", "mekanism", "pressurized_reaction_chamber"),
             factoryAlias("recycling_factory", "mekmm", "recycler"),
             factoryAlias("replicating_factory", "mekmm", "replicator"),
             factoryAlias("rolling_mill_factory", "mekmm", "cnc_rolling_mill"),
-            factoryAlias("stamping_factory", "mekmm", "stamper"),
-            factoryAlias("washing_factory", "mekmm", "washer"));
+            factoryAlias("stamping_factory", "mekmm", "cnc_stamper"),
+            factoryAlias("washing_factory", "mekanism", "chemical_washer"));
     private static final Map<ResourceLocation, ResourceLocation> CATALYST_ALIASES = Map.ofEntries(
             alias("packagedexcrafting", "basic_crafter", "extendedcrafting", "basic_table"),
             alias("packagedexcrafting", "advanced_crafter", "extendedcrafting", "advanced_table"),
@@ -74,36 +72,16 @@ public final class ClientRecipeMachineResolver {
     }
 
     static ResourceLocation catalystAlias(ResourceLocation blockId) {
-        if ((blockId.getNamespace().equals("mekanism_extras") || blockId.getNamespace().equals("mekmm"))
-                && (blockId.getPath().endsWith("_oxidizing_factory")
-                        || blockId.getPath().endsWith("_chemical_oxidizing_factory"))) {
-            return id("mekanism", "chemical_oxidizer");
-        }
         ResourceLocation alias = CATALYST_ALIASES.get(blockId);
         if (alias != null) {
             return alias;
         }
-        if (blockId.getNamespace().equals("mekmm")) {
-            String path = blockId.getPath();
-            for (String tier : FACTORY_TIERS) {
-                if (path.startsWith(tier)) {
-                    path = path.substring(tier.length());
-                    break;
-                }
-            }
-            ResourceLocation machine = MEKANISM_EXTRAS_FACTORY_ALIASES.get(path);
-            if (machine != null) {
-                return machine;
-            }
-        }
-        if (!blockId.getNamespace().equals("mekanism_extras")) {
-            return alias == null ? blockId : alias;
-        }
-        for (String tier : MEKANISM_EXTRAS_TIERS) {
-            if (blockId.getPath().startsWith(tier)) {
-                return MEKANISM_EXTRAS_FACTORY_ALIASES.getOrDefault(
-                        blockId.getPath().substring(tier.length()), blockId);
-            }
+        if (blockId.getNamespace().equals("mekmm") || blockId.getNamespace().equals("mekanism_extras")) {
+            return MEKANISM_EXTRAS_FACTORY_ALIASES.entrySet().stream()
+                    .filter(entry -> blockId.getPath().endsWith("_" + entry.getKey()))
+                    .map(Map.Entry::getValue)
+                    .findFirst()
+                    .orElse(blockId);
         }
         return blockId;
     }
