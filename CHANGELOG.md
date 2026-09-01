@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.23 - 2026-09-01
+
+- Mapped all Mekanism More Machine and Mekanism Extras factories to their real single-block workstations.
+- Fixed incorrect workstation ids for injection, sawing, chemical processing, and MekMM machines.
+- Added support for every shipped MekMM factory tier and normalized mismatched JEI category names.
+
 ## 0.1.22 - 2026-09-01
 
 - Fixed EMI aggregate scans failing when a category and recipe produced a pattern id longer than the 160-character protocol limit.
