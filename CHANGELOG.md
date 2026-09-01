@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.22 - 2026-09-01
+
+- Fixed EMI aggregate scans failing when a category and recipe produced a pattern id longer than the 160-character protocol limit.
+- Kept long pattern ids stable and unique by retaining a readable prefix with a SHA-256 suffix.
+
 ## 0.1.21 - 2026-09-01
 
 - Fixed pure-JEI pattern generation for Mekanism's Chemical Oxidizer by mapping its machine id to the oxidizing recipe category.

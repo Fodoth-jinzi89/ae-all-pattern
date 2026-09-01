@@ -10,6 +10,7 @@ import io.github.langqi99.aeallpattern.aggregate.*;
 import io.github.langqi99.aeallpattern.AeAllPattern;
 import io.github.langqi99.aeallpattern.client.ClientRecipeMachineResolver;
 import io.github.langqi99.aeallpattern.network.GenerateAggregatePayload;
+import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
 import io.netty.buffer.Unpooled;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -132,11 +133,17 @@ public final class EmiAggregateScanner {
         }
         ResourceLocation id = backing == null ? recipe.getId() : backing.id();
         if (id == null) return Optional.empty();
-        String patternId = recipe.getCategory().getId() + "/" + id;
+        String patternId = patternId(recipe.getCategory().getId() + "/" + id);
         if (!ids.add(patternId)) return Optional.empty();
         return Optional.of(new AggregateRecipe(patternId, id, kind(backing),
                 inputs.stream().map(AggregateInputSlot::primary).toList(), inputs, outputs,
                 probabilisticOutputMask(scannedOutputs), 1));
+    }
+
+    static String patternId(String rawId) {
+        if (rawId.length() <= AggregatePatternSelection.MAX_ID_LENGTH) return rawId;
+        String hash = new RecipeFingerprint("emi", rawId, "", "", 1).stableKey();
+        return rawId.substring(0, AggregatePatternSelection.MAX_ID_LENGTH - hash.length() - 1) + ":" + hash;
     }
 
     private static Optional<ScannedOutput> output(EmiStack output) {
