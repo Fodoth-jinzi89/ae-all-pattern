@@ -92,6 +92,44 @@ class JeiCategorySelectionTest {
     }
 
     @Test
+    void addonAdvancedFactoriesBorrowEveryMekanismCategory() {
+        var categories = List.of(
+                id("mekanism:centrifuging"), id("mekanism:crystallizing"),
+                id("mekanism:dissolution"), id("mekanism:nutritional_liquification"),
+                id("mekanism:oxidizing"), id("mekanism:painting"),
+                id("mekanism:pigment_extracting"), id("mekanism:reaction"),
+                id("mekanism:washing"));
+
+        assertEquals(id("mekanism:centrifuging"), pick("mekmm:quantum_centrifuging_factory", categories));
+        assertEquals(id("mekanism:crystallizing"), pick("mekmm:creative_crystallizing_factory", categories));
+        assertEquals(id("mekanism:dissolution"), pick("mekanism_extras:cosmic_dissolving_factory", categories));
+        assertEquals(id("mekanism:nutritional_liquification"),
+                pick("mekmm:dense_liquifying_factory", categories));
+        assertEquals(id("mekanism:painting"), pick("mekmm:overclocked_painting_factory", categories));
+        assertEquals(id("mekanism:pigment_extracting"),
+                pick("mekanism_extras:supreme_pigment_extracting_factory", categories));
+        assertEquals(id("mekanism:reaction"),
+                pick("mekanism_extras:absolute_pressurised_reacting_factory", categories));
+        assertEquals(id("mekanism:washing"), pick("mekmm:multiversal_washing_factory", categories));
+    }
+
+    @Test
+    void mappedSingleBlockMachinesPickTheirActualCategory() {
+        assertSingleMachineCategory("mekanism:osmium_compressor", "mekanism:compressing");
+        assertSingleMachineCategory("mekanism:chemical_injection_chamber", "mekanism:injecting");
+        assertSingleMachineCategory("mekanism:precision_sawmill", "mekanism:sawing");
+        assertSingleMachineCategory("mekanism:energized_smelter", "mekanism:smelting");
+        assertSingleMachineCategory("mekanism:isotopic_centrifuge", "mekanism:centrifuging");
+        assertSingleMachineCategory("mekanism:chemical_crystallizer", "mekanism:crystallizing");
+        assertSingleMachineCategory("mekanism:chemical_dissolution_chamber", "mekanism:dissolution");
+        assertSingleMachineCategory("mekanism:nutritional_liquifier", "mekanism:nutritional_liquification");
+        assertSingleMachineCategory("mekanism:chemical_washer", "mekanism:washing");
+        assertSingleMachineCategory("mekmm:cnc_lathe", "mekmm:lathing");
+        assertSingleMachineCategory("mekmm:cnc_rolling_mill", "mekmm:rolling_mill");
+        assertSingleMachineCategory("mekmm:cnc_stamper", "mekmm:stamping");
+    }
+
+    @Test
     void addonMachinePrefersItsOwnCategoryWhenBothExist() {
         var picked = ClientJeiAggregateScanner.pickCategoryId(
                 List.of(id("mekmm:oxidizing"), id("mekanism:oxidizing")),
@@ -117,10 +155,19 @@ class JeiCategorySelectionTest {
         assertEquals("infusing", ClientJeiAggregateScanner.machineKeyword("basic_infusing_factory"));
         assertEquals("infusing", ClientJeiAggregateScanner.machineKeyword("infusing_factory"));
         assertEquals("crushing", ClientJeiAggregateScanner.machineKeyword("ultimate_crushing_factory"));
+        assertEquals("crystallizing", ClientJeiAggregateScanner.machineKeyword("creative_crystallizing_factory"));
+        assertEquals("dissolution", ClientJeiAggregateScanner.machineKeyword("quantum_dissolving_factory"));
+        assertEquals("nutritional_liquification", ClientJeiAggregateScanner.machineKeyword("dense_liquifying_factory"));
+        assertEquals("reaction", ClientJeiAggregateScanner.machineKeyword("multiversal_pressurised_reacting_factory"));
         assertEquals("enrichment", ClientJeiAggregateScanner.machineKeyword("enrichment_chamber"));
     }
 
     private static ResourceLocation pick(String machine, List<ResourceLocation> categories) {
         return ClientJeiAggregateScanner.pickCategoryId(categories, id(machine));
+    }
+
+    private static void assertSingleMachineCategory(String machine, String expectedCategory) {
+        ResourceLocation expected = id(expectedCategory);
+        assertEquals(expected, pick(machine, List.of(id("unrelated:first"), expected)));
     }
 }
