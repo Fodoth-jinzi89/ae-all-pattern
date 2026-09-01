@@ -4,7 +4,7 @@
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| Minecraft 1.21.1 + NeoForge | 已实现 | Java 21；发布版 0.1.5 |
+| Minecraft 1.21.1 + NeoForge | 已实现 | Java 21；发布版 0.1.19 |
 | Minecraft 1.20.1 + Forge | 未实现、未发布 | 仅定义了未来兼容线的维护流程，不是当前可下载版本 |
 | AE2 Grid Node/provider | 已实现 | 一个频道、2 AE/t，断频道时停止发布 |
 | 两阶段绑定与持久化 | 已实现 | 64 格、同维度、所有者校验、schema 化 SavedData |
@@ -15,6 +15,9 @@
 | Mekanism 冶炼/粉碎/富集 | 已实现 | 单机与对应工厂；依赖缺失时 compat 不加载 |
 | JEI 聚合样板扫描 | 已实现 | 右击机器时按页上传配方，物品/流体保存为 AE 通用键 |
 | Mekanism Chemical 聚合样板 | 已实现（可选） | 安装 Applied Mekanistics + AE2 JEI Integration 后保留真实 Chemical 键和数量 |
+| PackagedAuto 聚合样板 | 已实现（可选） | 聚合样板可在包装供应器工作流中展开并保持目标机器映射 |
+| Advanced AE 高级样板编码器 | 已实现（可选） | 仅灌注工厂聚合样板可被高级样板编码器读取编辑；未选中的子样板不向编码器暴露 |
+| 万象合金炉聚合样板 | 已实现（可选） | 安装 Useless Mod 时启用高级合金炉兼容；缺失时对应混入不加载 |
 | 诊断 | 已实现 | `/aeallpattern status` 与管理员 `/aeallpattern perf` |
 | 绑定器自动投料的概率/流体/化学品/跨维度 | 暂不支持 | 聚合样板发布与机器执行是两条独立边界；执行仍需对应 AE 兼容层 |
 

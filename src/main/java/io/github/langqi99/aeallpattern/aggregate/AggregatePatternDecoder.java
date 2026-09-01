@@ -4,11 +4,15 @@ import appeng.api.crafting.IPatternDetails;
 import appeng.api.crafting.IPatternDetailsDecoder;
 import appeng.api.crafting.PatternDetailsHelper;
 import appeng.api.stacks.AEItemKey;
+import appeng.api.stacks.GenericStack;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+
+import java.util.List;
+import java.util.Objects;
 
 /** Registers aggregate patterns as encoded patterns and supplies a marker for expansion. */
 public final class AggregatePatternDecoder implements IPatternDetailsDecoder {
@@ -33,14 +37,19 @@ public final class AggregatePatternDecoder implements IPatternDetailsDecoder {
         if (!isEncodedPattern(stack)) {
             return null;
         }
-        var expanded = AggregatePatternExpander.expand(stack, level);
-        if (!expanded.isEmpty()) {
-            return new AggregatePatternMarkerDetails(key, expanded.getFirst());
+        // Only the first child is needed for a marker: expanding every child here would make
+        // slot-validity checks pay the full aggregate cost on every decode (thousands of
+        // recipes), which caused "cannot insert when all selected" timeouts on addon hosts.
+        IPatternDetails first = AggregatePatternExpander.expandFirst(stack, level);
+        if (first != null) {
+            return new AggregatePatternMarkerDetails(key, first);
         }
+        // Nothing is published right now (e.g. every child was deselected). The stand-in keeps
+        // the item valid inside pattern slots; it is flagged so providers never publish it.
         ItemStack encoded = PatternDetailsHelper.encodeProcessingPattern(
-                java.util.List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE))),
-                java.util.List.of(appeng.api.stacks.GenericStack.fromItemStack(new ItemStack(Items.STONE))));
-        IPatternDetails placeholder = PatternDetailsHelper.decodePattern(encoded, level);
-        return placeholder == null ? null : new AggregatePatternMarkerDetails(key, placeholder);
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.COBBLESTONE)))),
+                List.of(Objects.requireNonNull(GenericStack.fromItemStack(new ItemStack(Items.STONE)))));
+        IPatternDetails standIn = encoded.isEmpty() ? null : PatternDetailsHelper.decodePattern(encoded, level);
+        return standIn == null ? null : new AggregatePatternMarkerDetails(key, standIn, true);
     }
 }

@@ -6,6 +6,8 @@ import io.github.langqi99.aeallpattern.binding.BindingSavedData;
 import io.github.langqi99.aeallpattern.binding.BlockEntityFingerprint;
 import io.github.langqi99.aeallpattern.diagnostics.PerformanceMetrics;
 import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
+import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
+import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 
 /** Persistent ownership boundary between AE and an external machine. */
+@SuppressWarnings("deprecation")
 public final class IncomingBuffer {
     private static final int MAX_QUEUED_CRAFTS = 64;
     private static final int MAX_RECOVERED_STACKS = 64;
@@ -29,22 +32,52 @@ public final class IncomingBuffer {
     private final List<BufferedInput> queue = new ArrayList<>();
     private final List<PendingCraft> pending = new ArrayList<>();
     private final List<RecoveredOutput> recoveredOutputs = new ArrayList<>();
+    /** O(1) outstanding-work counter per binding, kept in sync with queue and pending. */
+    private final java.util.Map<UUID, Integer> workCount = new java.util.HashMap<>();
 
     public boolean canAccept(UUID bindingId) {
         return queue.size() < MAX_QUEUED_CRAFTS && !hasWork(bindingId);
     }
 
     public boolean hasWork(UUID bindingId) {
-        return queue.stream().anyMatch(input -> input.bindingId.equals(bindingId))
-                || pending.stream().anyMatch(craft -> craft.bindingId.equals(bindingId));
+        return workCount.getOrDefault(bindingId, 0) > 0;
+    }
+
+    private void incrementWork(UUID bindingId) {
+        workCount.merge(bindingId, 1, Integer::sum);
+    }
+
+    private void decrementWork(UUID bindingId) {
+        Integer count = workCount.get(bindingId);
+        if (count == null || count <= 1) {
+            workCount.remove(bindingId);
+        } else {
+            workCount.put(bindingId, count - 1);
+        }
     }
 
     public void enqueue(BindingRecord binding, String patternKey, ItemStack input, ItemStack output, int processingTicks) {
+        RecipeFingerprint fingerprint = new RecipeFingerprint(
+                binding.adapterId(), patternKey, input.toString(), output.toString(), binding.adapterSchema());
+        enqueue(binding, patternKey,
+                new RecipeSnapshot(ResourceLocation.parse("aeallpattern:legacy_buffer"), input, output, fingerprint, processingTicks),
+                List.of(input), output, processingTicks);
+    }
+
+    public void enqueue(
+            BindingRecord binding,
+            String patternKey,
+            RecipeSnapshot recipe,
+            List<ItemStack> inputs,
+            ItemStack output,
+            int processingTicks) {
         if (!canAccept(binding.bindingId())) {
             throw new IllegalStateException("buffer cannot accept another craft for " + binding.bindingId());
         }
         queue.add(new BufferedInput(
-                binding.bindingId(), patternKey, input.copy(), output.copy(), Math.max(1, processingTicks)));
+                binding.bindingId(), patternKey, recipe.recipeId(),
+                inputs.stream().map(ItemStack::copy).toList(), output.copy(), Math.max(1, processingTicks)));
+        incrementWork(binding.bindingId());
     }
 
     public boolean tick(ServerLevel linkerLevel, PatternLinkerBlockEntity linker) {
@@ -76,7 +109,12 @@ public final class IncomingBuffer {
             }
             var adapter = MachineAdapterRegistry.byId(adapterId)
                     .filter(candidate -> candidate.supports(targetLevel, target));
-            if (adapter.isEmpty() || !adapter.get().insert(targetLevel, record, buffered.input)) {
+            RecipeSnapshot recipe = new RecipeSnapshot(
+                    buffered.recipeId, buffered.inputs, buffered.output,
+                    new RecipeFingerprint(record.adapterId(), buffered.patternKey,
+                            buffered.inputs.toString(), buffered.output.toString(), record.adapterSchema()),
+                    buffered.processingTicks);
+            if (adapter.isEmpty() || !adapter.get().insertRecipe(targetLevel, record, recipe, buffered.inputs)) {
                 continue;
             }
 
@@ -86,7 +124,8 @@ public final class IncomingBuffer {
                     buffered.patternKey,
                     buffered.output,
                     targetLevel.getGameTime() + buffered.processingTicks + 40L));
-            PerformanceMetrics.machineInputInserted(buffered.input.getCount());
+            // Work counter stays unchanged: the queue entry moved into pending.
+            PerformanceMetrics.machineInputInserted(buffered.inputs.stream().mapToInt(ItemStack::getCount).sum());
             return true;
         }
         return changed;
@@ -94,7 +133,7 @@ public final class IncomingBuffer {
 
     public List<ItemStack> recoverableDrops() {
         List<ItemStack> drops = new ArrayList<>();
-        queue.forEach(input -> drops.add(input.input.copy()));
+        queue.forEach(input -> input.inputs.forEach(stack -> drops.add(stack.copy())));
         recoveredOutputs.forEach(output -> drops.add(output.stack.copy()));
         return List.copyOf(drops);
     }
@@ -102,7 +141,7 @@ public final class IncomingBuffer {
     public List<ItemStack> removeBinding(UUID bindingId) {
         List<ItemStack> recovered = queue.stream()
                 .filter(input -> input.bindingId.equals(bindingId))
-                .map(input -> input.input.copy())
+                .flatMap(input -> input.inputs.stream().map(ItemStack::copy))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         recoveredOutputs.stream()
                 .filter(output -> output.bindingId.equals(bindingId))
@@ -111,6 +150,7 @@ public final class IncomingBuffer {
         queue.removeIf(input -> input.bindingId.equals(bindingId));
         pending.removeIf(craft -> craft.bindingId.equals(bindingId));
         recoveredOutputs.removeIf(output -> output.bindingId.equals(bindingId));
+        workCount.remove(bindingId);
         return List.copyOf(recovered);
     }
 
@@ -118,6 +158,7 @@ public final class IncomingBuffer {
         queue.clear();
         pending.clear();
         recoveredOutputs.clear();
+        workCount.clear();
     }
 
     public void save(CompoundTag parent, HolderLookup.Provider registries) {
@@ -126,7 +167,10 @@ public final class IncomingBuffer {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("BindingId", input.bindingId);
             tag.putString("PatternKey", input.patternKey);
-            tag.put("Input", input.input.save(registries));
+            tag.putString("RecipeId", input.recipeId.toString());
+            ListTag inputsTag = new ListTag();
+            input.inputs.forEach(stack -> inputsTag.add(stack.save(registries)));
+            tag.put("Inputs", inputsTag);
             tag.put("Output", input.output.save(registries));
             tag.putInt("ProcessingTicks", input.processingTicks);
             queueTag.add(tag);
@@ -159,15 +203,34 @@ public final class IncomingBuffer {
         ListTag queueTag = parent.getList(QUEUE_TAG, Tag.TAG_COMPOUND);
         for (Tag raw : queueTag) {
             CompoundTag tag = (CompoundTag) raw;
-            ItemStack input = parseStack(registries, tag.get("Input"));
+            List<ItemStack> inputs = new ArrayList<>();
+            for (Tag inputTag : tag.getList("Inputs", Tag.TAG_COMPOUND)) {
+                ItemStack input = parseStack(registries, inputTag);
+                if (!input.isEmpty()) {
+                    inputs.add(input);
+                }
+            }
+            if (inputs.isEmpty()) {
+                ItemStack legacyInput = parseStack(registries, tag.get("Input"));
+                if (!legacyInput.isEmpty()) {
+                    inputs.add(legacyInput);
+                }
+            }
             ItemStack output = parseStack(registries, tag.get("Output"));
-            if (!input.isEmpty() && !output.isEmpty() && tag.hasUUID("BindingId")) {
+            ResourceLocation recipeId = ResourceLocation.tryParse(tag.getString("RecipeId"));
+            if (recipeId == null) {
+                recipeId = ResourceLocation.parse("aeallpattern:legacy_buffer");
+            }
+            if (!inputs.isEmpty() && !output.isEmpty() && tag.hasUUID("BindingId")) {
+                UUID bindingId = tag.getUUID("BindingId");
                 queue.add(new BufferedInput(
-                        tag.getUUID("BindingId"),
+                        bindingId,
                         tag.getString("PatternKey"),
-                        input,
+                        recipeId,
+                        List.copyOf(inputs),
                         output,
                         Math.max(1, tag.getInt("ProcessingTicks"))));
+                incrementWork(bindingId);
             }
         }
         ListTag pendingTag = parent.getList(PENDING_TAG, Tag.TAG_COMPOUND);
@@ -175,14 +238,16 @@ public final class IncomingBuffer {
             CompoundTag tag = (CompoundTag) raw;
             ItemStack output = parseStack(registries, tag.get("Output"));
             if (!output.isEmpty() && tag.hasUUID("BindingId")) {
+                UUID bindingId = tag.getUUID("BindingId");
                 pending.add(new PendingCraft(
-                        tag.getUUID("BindingId"),
+                        bindingId,
                         tag.getString("PatternKey"),
                         output,
                         tag.getLong("ReleaseAt")));
+                incrementWork(bindingId);
                 ItemStack legacyRecovered = parseStack(registries, tag.get("RecoveredOutput"));
                 if (!legacyRecovered.isEmpty()) {
-                    recoveredOutputs.add(new RecoveredOutput(tag.getUUID("BindingId"), legacyRecovered));
+                    recoveredOutputs.add(new RecoveredOutput(bindingId, legacyRecovered));
                 }
             }
         }
@@ -212,11 +277,9 @@ public final class IncomingBuffer {
         if (recoveredOutputs.size() >= MAX_RECOVERED_STACKS) {
             return false;
         }
-        for (BindingRecord record : BindingSavedData.get(linkerLevel.getServer()).all()) {
-            if (!record.anchor().dimension().equals(linkerLevel.dimension())
-                    || !record.anchor().pos().equals(linker.getBlockPos())) {
-                continue;
-            }
+        BindingSavedData savedData = BindingSavedData.get(linkerLevel.getServer());
+        for (BindingRecord record : savedData.byAnchor(
+                net.minecraft.core.GlobalPos.of(linkerLevel.dimension(), linker.getBlockPos()))) {
             ServerLevel targetLevel = linkerLevel.getServer().getLevel(record.target().dimension());
             if (targetLevel == null || !targetLevel.hasChunkAt(record.target().pos())) {
                 continue;
@@ -274,11 +337,18 @@ public final class IncomingBuffer {
     }
 
     private boolean releaseFinishedCrafts(ServerLevel linkerLevel) {
+        BindingSavedData savedData = BindingSavedData.get(linkerLevel.getServer());
         int before = pending.size();
-        pending.removeIf(craft -> BindingSavedData.get(linkerLevel.getServer()).find(craft.bindingId)
-                .map(binding -> linkerLevel.getServer().getLevel(binding.target().dimension()))
-                .map(level -> level.getGameTime() >= craft.releaseAt)
-                .orElse(true));
+        pending.removeIf(craft -> {
+            boolean release = savedData.find(craft.bindingId)
+                    .map(binding -> linkerLevel.getServer().getLevel(binding.target().dimension()))
+                    .map(level -> level.getGameTime() >= craft.releaseAt)
+                    .orElse(true);
+            if (release) {
+                decrementWork(craft.bindingId);
+            }
+            return release;
+        });
         return before != pending.size();
     }
 
@@ -293,7 +363,15 @@ public final class IncomingBuffer {
     }
 
     private record BufferedInput(
-            UUID bindingId, String patternKey, ItemStack input, ItemStack output, int processingTicks) {
+            UUID bindingId,
+            String patternKey,
+            ResourceLocation recipeId,
+            List<ItemStack> inputs,
+            ItemStack output,
+            int processingTicks) {
+        private BufferedInput {
+            inputs = inputs.stream().map(ItemStack::copy).toList();
+        }
     }
 
     private record PendingCraft(

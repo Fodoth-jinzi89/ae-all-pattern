@@ -40,6 +40,17 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
         return definition;
     }
 
+    /**
+     * The AE2 pattern this aggregate child was expanded into.
+     *
+     * <p>Addon tools that inspect patterns by concrete type (Advanced AE's pattern encoder only
+     * understands {@code AEProcessingPattern} and {@code AdvProcessingPattern}) need to look
+     * through the wrapper to recognise an aggregate child.</p>
+     */
+    public IPatternDetails delegate() {
+        return delegate;
+    }
+
     @Override
     public IInput[] getInputs() {
         return configuredInputs == null ? delegate.getInputs() : configuredInputs;
@@ -96,36 +107,34 @@ public final class AggregatePatternDetails implements IPatternDetails, RoutingPa
         return 31 * definition.hashCode() + patternId.hashCode();
     }
 
-    private static final class AlternativeInput implements IInput {
-        private final GenericStack[] possibleInputs;
-
-        private AlternativeInput(AggregateInputSlot slot) {
-            possibleInputs = slot.alternatives().toArray(GenericStack[]::new);
-        }
-
-        @Override
-        public GenericStack[] getPossibleInputs() {
-            return possibleInputs;
-        }
-
-        @Override
-        public long getMultiplier() {
-            return 1;
-        }
-
-        @Override
-        public boolean isValid(AEKey key, Level level) {
-            for (GenericStack candidate : possibleInputs) {
-                if (key.matches(candidate)) {
-                    return true;
-                }
+    private record AlternativeInput(GenericStack[] possibleInputs) implements IInput {
+            private AlternativeInput(AggregateInputSlot slot) {
+                this(slot.alternatives().toArray(GenericStack[]::new));
             }
-            return false;
-        }
 
-        @Override
-        public AEKey getRemainingKey(AEKey key) {
-            return null;
+            @Override
+            public GenericStack[] getPossibleInputs() {
+                return possibleInputs;
+            }
+
+            @Override
+            public long getMultiplier() {
+                return 1;
+            }
+
+            @Override
+            public boolean isValid(AEKey key, Level level) {
+                for (GenericStack candidate : possibleInputs) {
+                    if (key.matches(candidate)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public AEKey getRemainingKey(AEKey key) {
+                return null;
+            }
         }
-    }
 }

@@ -1,8 +1,10 @@
 package io.github.langqi99.aeallpattern.binding;
 
+import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
 import io.github.langqi99.aeallpattern.linker.PatternLinkerBlockEntity;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
+import io.github.langqi99.aeallpattern.machine.MachineTargetResolver;
 import io.github.langqi99.aeallpattern.network.BindingSyncService;
 import java.util.List;
 import java.util.Optional;
@@ -19,17 +21,17 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import org.jetbrains.annotations.NotNull;
 
 /** Server-authoritative two-step binding tool. */
+@SuppressWarnings("deprecation")
 public final class PatternBinderItem extends Item {
-    private static final double MAX_BINDING_DISTANCE_SQUARED = 64.0 * 64.0;
-
     public PatternBinderItem(Properties properties) {
         super(properties);
     }
 
     @Override
-    public InteractionResult useOn(UseOnContext context) {
+    public @NotNull InteractionResult useOn(UseOnContext context) {
         Player player = context.getPlayer();
         if (player == null) {
             return InteractionResult.FAIL;
@@ -46,11 +48,12 @@ public final class PatternBinderItem extends Item {
         BlockEntity clickedBlockEntity = level.getBlockEntity(clickedPos);
         ItemStack binder = context.getItemInHand();
 
-        if (!context.isSecondaryUseActive() && clickedBlockEntity instanceof PatternLinkerBlockEntity linker) {
+        if (context.isSecondaryUseActive() && clickedBlockEntity instanceof PatternLinkerBlockEntity linker) {
             return selectAnchor(level, clickedPos, player, binder, linker);
         }
         if (context.isSecondaryUseActive()) {
-            return finishBinding(level, clickedPos, context, player, binder, clickedBlockEntity);
+            BlockPos targetPos = MachineTargetResolver.resolvePosition(level, clickedPos);
+            return finishBinding(level, targetPos, context, player, binder, level.getBlockEntity(targetPos));
         }
         return InteractionResult.PASS;
     }
@@ -95,15 +98,17 @@ public final class PatternBinderItem extends Item {
 
         ServerLevel anchorLevel = targetLevel.getServer().getLevel(selection.anchor().dimension());
         boolean sameDimension = selection.anchor().dimension().equals(targetLevel.dimension());
+        boolean dimensionAllowed = sameDimension || AeAllPatternCommonConfig.LINKER_ALLOW_CROSS_DIMENSION.get();
         boolean anchorLoaded = anchorLevel != null && anchorLevel.hasChunkAt(selection.anchor().pos());
         BlockEntity rawAnchor = anchorLoaded ? anchorLevel.getBlockEntity(selection.anchor().pos()) : null;
         PatternLinkerBlockEntity linker = rawAnchor instanceof PatternLinkerBlockEntity found ? found : null;
         boolean ownerMatches = selection.ownerId().equals(player.getUUID())
                 && (linker == null || linker.isOwnedBy(player));
-        boolean withinRange = sameDimension
-                && player.distanceToSqr(selection.anchor().pos().getCenter()) <= MAX_BINDING_DISTANCE_SQUARED
-                && player.distanceToSqr(targetPos.getCenter()) <= MAX_BINDING_DISTANCE_SQUARED
-                && selection.anchor().pos().distSqr(targetPos) <= MAX_BINDING_DISTANCE_SQUARED;
+        double maxDistanceSquared = AeAllPatternCommonConfig.maxBindingDistanceSquared();
+        boolean withinRange = player.distanceToSqr(targetPos.getCenter()) <= maxDistanceSquared
+                && (!sameDimension
+                        || player.distanceToSqr(selection.anchor().pos().getCenter()) <= maxDistanceSquared
+                                && selection.anchor().pos().distSqr(targetPos) <= maxDistanceSquared);
         boolean anchorMatches = linker != null
                 && selection.anchorFingerprint().equals(BlockEntityFingerprint.of(linker));
         var targetAdapter = targetBlockEntity == null
@@ -122,7 +127,7 @@ public final class PatternBinderItem extends Item {
                 true,
                 selection.hasSupportedSchema(),
                 ownerMatches,
-                sameDimension,
+                dimensionAllowed,
                 withinRange,
                 anchorLoaded,
                 anchorMatches,
@@ -130,14 +135,23 @@ public final class PatternBinderItem extends Item {
                 targetSupported,
                 targetAvailable));
         if (decision != BindingDecision.SUCCESS) {
-            show(player, "message.aeallpattern.binding." + decision.name().toLowerCase());
+            if (decision == BindingDecision.TOO_FAR) {
+                show(player, "message.aeallpattern.binding.too_far",
+                        AeAllPatternCommonConfig.LINKER_MAX_BINDING_DISTANCE.getAsInt());
+            } else {
+                show(player, "message.aeallpattern.binding." + decision.name().toLowerCase());
+            }
             return InteractionResult.FAIL;
         }
 
         if (existing.isPresent()) {
-            linker.cancelBinding(existing.get().bindingId());
+            if (linker != null) {
+                linker.cancelBinding(existing.get().bindingId());
+            }
             data.remove(existing.get().bindingId());
-            linker.refreshPatterns();
+            if (linker != null) {
+                linker.refreshPatterns();
+            }
             if (player instanceof ServerPlayer serverPlayer) {
                 BindingSyncService.send(serverPlayer);
             }
@@ -146,21 +160,26 @@ public final class PatternBinderItem extends Item {
         }
 
         long gameTime = targetLevel.getGameTime();
-        BindingRecord record = new BindingRecord(
-                BindingRecord.CURRENT_SCHEMA_VERSION,
-                UUID.randomUUID(),
-                player.getUUID(),
-                selection.anchor(),
-                target,
-                context.getClickedFace(),
-                selection.anchorFingerprint(),
-                BlockEntityFingerprint.of(targetBlockEntity),
-                targetAdapter.orElseThrow().id().toString(),
-                targetAdapter.orElseThrow().schemaVersion(),
-                gameTime,
-                gameTime);
+        BindingRecord record = null;
+        if (targetBlockEntity != null) {
+            record = new BindingRecord(
+                    BindingRecord.CURRENT_SCHEMA_VERSION,
+                    UUID.randomUUID(),
+                    player.getUUID(),
+                    selection.anchor(),
+                    target,
+                    context.getClickedFace(),
+                    selection.anchorFingerprint(),
+                    BlockEntityFingerprint.of(targetBlockEntity),
+                    targetAdapter.orElseThrow().id().toString(),
+                    targetAdapter.orElseThrow().schemaVersion(),
+                    gameTime,
+                    gameTime);
+        }
         data.put(record);
-        linker.refreshPatterns();
+        if (linker != null) {
+            linker.refreshPatterns();
+        }
         if (player instanceof ServerPlayer serverPlayer) {
             BindingSyncService.send(serverPlayer);
         }
@@ -170,7 +189,7 @@ public final class PatternBinderItem extends Item {
 
     @Override
     public void appendHoverText(
-            ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+            @NotNull ItemStack stack, @NotNull TooltipContext context, @NotNull List<Component> tooltip, @NotNull TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
         AnchorSelection selection = stack.get(ModDataComponents.ANCHOR_SELECTION.get());
         if (selection == null) {

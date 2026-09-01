@@ -1,0 +1,218 @@
+package io.github.langqi99.aeallpattern.aggregate;
+
+import appeng.api.stacks.GenericStack;
+import io.github.langqi99.aeallpattern.network.AggregateSearchResultPayload;
+import io.github.langqi99.aeallpattern.registry.ModDataComponents;
+import io.github.langqi99.aeallpattern.config.AeAllPatternCommonConfig;
+import io.github.langqi99.aeallpattern.registry.ModItems;
+import io.github.langqi99.aeallpattern.registry.ModMenus;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import javax.annotation.Nullable;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.network.PacketDistributor;
+import org.jetbrains.annotations.NotNull;
+
+/**
+ * Server-authoritative pattern picker for one held aggregate pattern. The client keeps an
+ * optimistic copy of the selection so clicks feel instant, exactly like the option menu.
+ */
+public final class AggregatePatternSelectionMenu extends AbstractContainerMenu {
+    /** clickMenuButton ids below zero are bulk actions. */
+    public static final int SELECT_ALL = -1;
+    public static final int DESELECT_ALL = -2;
+
+    /** Safety cap for the open-packet payload; bulk actions still cover every stored recipe. */
+    public static final int MAX_SYNCED_ENTRIES = 16384;
+
+    private static final int MAX_STACKS_PER_LIST = 81;
+
+    private final Inventory inventory;
+    @Nullable
+    private final InteractionHand hand;
+    private List<Entry> entries;
+    private AggregatePatternSelection selection;
+
+    /** Client-side summary of one child pattern inside the aggregate. */
+    public record Entry(String patternId, List<GenericStack> inputs, List<GenericStack> outputs) {
+        public Entry {
+            patternId = patternId == null ? "" : patternId;
+            inputs = List.copyOf(inputs == null ? List.of() : inputs);
+            outputs = List.copyOf(outputs == null ? List.of() : outputs);
+        }
+    }
+
+    public AggregatePatternSelectionMenu(int id, Inventory inventory, RegistryFriendlyByteBuf data) {
+        this(id, inventory, data.readEnum(InteractionHand.class), readEntries(data),
+                AggregatePatternSelection.STREAM_CODEC.decode(data));
+    }
+
+    public AggregatePatternSelectionMenu(
+            int id,
+            Inventory inventory,
+            @Nullable InteractionHand hand,
+            List<Entry> entries,
+            AggregatePatternSelection selection) {
+        super(ModMenus.AGGREGATE_PATTERN_SELECTION.get(), id);
+        this.inventory = inventory;
+        this.hand = hand;
+        this.entries = List.copyOf(entries);
+        this.selection = selection == null ? AggregatePatternSelection.ALL_ENABLED : selection;
+    }
+
+    public static List<Entry> entriesFromRecipes(List<AggregateRecipe> recipes) {
+        int limit = Math.min(MAX_SYNCED_ENTRIES, AeAllPatternCommonConfig.SELECTION_DISPLAY_LIMIT.getAsInt());
+        List<Entry> entries = new ArrayList<>(Math.min(recipes.size(), limit));
+        for (AggregateRecipe recipe : recipes) {
+            if (entries.size() >= limit) {
+                break;
+            }
+            entries.add(new Entry(
+                    recipe.patternId(),
+                    recipe.inputs().stream().limit(MAX_STACKS_PER_LIST).toList(),
+                    recipe.outputs().stream().limit(MAX_STACKS_PER_LIST).toList()));
+        }
+        return List.copyOf(entries);
+    }
+
+    public List<Entry> entries() {
+        return entries;
+    }
+
+    /** Client-side replacement of the visible entries after a search result arrives. */
+    public void updateEntries(List<Entry> entries) {
+        this.entries = List.copyOf(entries);
+    }
+
+    /**
+     * Server-side search across the aggregate's complete recipe list, not just the synced
+     * subset. Replaces the local entry table and streams the filtered result back in bounded
+     * pages so the client picker can search every stored pattern.
+     */
+    public void applySearch(ServerPlayer player, String searchText, boolean searchOutputs, UUID requestId) {
+        ItemStack stack = stack();
+        if (!isSelectable(stack) || player.level().isClientSide()) {
+            return;
+        }
+        AggregatePatternRef ref = stack.get(ModDataComponents.AGGREGATE_PATTERN.get());
+        if (ref == null) {
+            return;
+        }
+        List<AggregateRecipe> recipes = AggregatePatternLibrary.get(player.server)
+                .recipes(player.server, ref.libraryId())
+                .orElseGet(List::of);
+        // Search runs over the complete recipe list with no cap: the user wants to search
+        // every stored pattern, not just the initially synced subset.
+        List<Entry> filtered = AggregatePatternSearch.filter(
+                recipes, searchText, searchOutputs, Integer.MAX_VALUE);
+        this.entries = List.copyOf(filtered);
+        int pageCount = Math.max(1, (filtered.size() + AggregateSearchResultPayload.MAX_ENTRIES_PER_PAGE - 1)
+                / AggregateSearchResultPayload.MAX_ENTRIES_PER_PAGE);
+        for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+            int from = pageIndex * AggregateSearchResultPayload.MAX_ENTRIES_PER_PAGE;
+            int to = Math.min(filtered.size(), from + AggregateSearchResultPayload.MAX_ENTRIES_PER_PAGE);
+            PacketDistributor.sendToPlayer(player, new AggregateSearchResultPayload(
+                    requestId, pageIndex, pageCount, filtered.subList(from, to)));
+        }
+    }
+
+    public int totalRecipeCount() {
+        return entries.size();
+    }
+
+    public boolean isEnabled(int index) {
+        return index >= 0 && index < entries.size() && selection.isEnabled(entries.get(index).patternId());
+    }
+
+    public boolean isAllSelected() {
+        return entries.stream().allMatch(entry -> selection.isEnabled(entry.patternId()));
+    }
+
+    public long selectedCount() {
+        return entries.stream().filter(entry -> selection.isEnabled(entry.patternId())).count();
+    }
+
+    public ItemStack stack() {
+        return hand == null ? ItemStack.EMPTY : inventory.player.getItemInHand(hand);
+    }
+
+    @Override
+    public boolean clickMenuButton(@NotNull Player player, int id) {
+        AggregatePatternSelection updated;
+        if (id == SELECT_ALL) {
+            updated = AggregatePatternSelection.ALL_ENABLED;
+        } else if (id == DESELECT_ALL) {
+            updated = AggregatePatternSelection.NONE_ENABLED;
+        } else if (id >= 0 && id < entries.size()) {
+            updated = selection.toggled(entries.get(id).patternId());
+        } else {
+            return false;
+        }
+
+        if (player.level().isClientSide()) {
+            selection = updated;
+            return true;
+        }
+
+        ItemStack stack = stack();
+        if (!isSelectable(stack)) {
+            return false;
+        }
+        if (updated.isAllEnabled()) {
+            stack.remove(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get());
+        } else {
+            stack.set(ModDataComponents.AGGREGATE_PATTERN_SELECTION.get(), updated);
+        }
+        player.getInventory().setChanged();
+        selection = updated;
+        broadcastChanges();
+        return true;
+    }
+
+    @Override
+    public boolean stillValid(@NotNull Player player) {
+        return hand != null && isSelectable(player.getItemInHand(hand));
+    }
+
+    @Override
+    public @NotNull ItemStack quickMoveStack(@NotNull Player player, int index) {
+        return ItemStack.EMPTY;
+    }
+
+    private static boolean isSelectable(ItemStack stack) {
+        return stack.is(ModItems.AGGREGATE_PATTERN.get())
+                && stack.has(ModDataComponents.AGGREGATE_PATTERN.get());
+    }
+
+    private static List<Entry> readEntries(RegistryFriendlyByteBuf buffer) {
+        int count = buffer.readVarInt();
+        if (count < 0 || count > MAX_SYNCED_ENTRIES) {
+            throw new IllegalArgumentException("invalid aggregate selection entry count: " + count);
+        }
+        List<Entry> entries = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            String patternId = buffer.readUtf(AggregatePatternSelection.MAX_ID_LENGTH);
+            entries.add(new Entry(patternId, readStacks(buffer), readStacks(buffer)));
+        }
+        return entries;
+    }
+
+    private static List<GenericStack> readStacks(RegistryFriendlyByteBuf buffer) {
+        int count = buffer.readVarInt();
+        if (count < 0 || count > MAX_STACKS_PER_LIST) {
+            throw new IllegalArgumentException("invalid aggregate selection stack count: " + count);
+        }
+        List<GenericStack> stacks = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            stacks.add(GenericStack.STREAM_CODEC.decode(buffer));
+        }
+        return stacks;
+    }
+}

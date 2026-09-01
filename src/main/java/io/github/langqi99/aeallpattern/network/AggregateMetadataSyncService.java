@@ -7,6 +7,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.Objects;
+
 public final class AggregateMetadataSyncService {
     private AggregateMetadataSyncService() {
     }
@@ -24,7 +26,7 @@ public final class AggregateMetadataSyncService {
     }
 
     public static void send(ServerPlayer player) {
-        var entries = AggregatePatternLibrary.get(player.getServer()).entries().stream()
+        var entries = AggregatePatternLibrary.get(Objects.requireNonNull(player.getServer())).entries().stream()
                 .map(entry -> new AggregateMetadataView.Entry(
                         entry.libraryId(), entry.catalystId(), entry.machineTranslationKey(),
                         entry.contentHash(), entry.recipeCount()))

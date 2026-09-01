@@ -10,6 +10,8 @@ import appeng.api.stacks.AEKey;
 import appeng.api.stacks.GenericStack;
 import appeng.menu.guisync.GuiSync;
 import appeng.menu.me.crafting.CraftConfirmMenu;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicyContext;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.ByproductPlanWarnings;
@@ -21,7 +23,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -88,7 +89,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
 
     @Inject(method = "planJob", at = @At("HEAD"))
     private void aeallpattern$loadNetworkDefault(
-            AEKey what, int requestedAmount, CalculationStrategy strategy,
+            AEKey what, int amount, CalculationStrategy strategy,
             CallbackInfoReturnable<Boolean> cir) {
         CraftConfirmMenu self = (CraftConfirmMenu) (Object) this;
         if (self.isClientSide()) {
@@ -104,7 +105,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
         }
     }
 
-    @Redirect(
+    @WrapOperation(
             method = "planJob",
             at = @At(
                     value = "INVOKE",
@@ -120,13 +121,14 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
             ICraftingSimulationRequester requester,
             AEKey what,
             long requestedAmount,
-            CalculationStrategy strategy) {
+            CalculationStrategy strategy,
+            Operation<Future<ICraftingPlan>> original) {
         if (!aeallpattern$routingAvailable) {
-            return service.beginCraftingCalculation(level, requester, what, requestedAmount, strategy);
+            return original.call(service, level, requester, what, requestedAmount, strategy);
         }
         return CraftingRoutePolicyContext.withPolicy(
                 aeallpattern$getRoutePolicy(),
-                () -> service.beginCraftingCalculation(level, requester, what, requestedAmount, strategy));
+                () -> original.call(service, level, requester, what, requestedAmount, strategy));
     }
 
     @Inject(method = "broadcastChanges", at = @At("TAIL"))
@@ -160,7 +162,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
 
     @Override
     public void aeallpattern$updateRoutePolicy(CraftingRoutePolicy policy) {
-        CraftingRoutePolicy normalized = forceFeasible(policy);
+        CraftingRoutePolicy normalized = aeallpattern$forceFeasible(policy);
         aeallpattern$setFields(normalized);
         CraftConfirmMenu self = (CraftConfirmMenu) (Object) this;
         self.setPlan(null);
@@ -185,7 +187,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
     @Unique
     private void aeallpattern$applyPolicy(CraftingRoutePolicy policy, boolean replan) {
         aeallpattern$policyInitialized = true;
-        aeallpattern$setFields(forceFeasible(policy));
+        aeallpattern$setFields(aeallpattern$forceFeasible(policy));
         ((CraftConfirmMenu) (Object) this).setPlan(null);
         if (replan) {
             aeallpattern$replan();
@@ -213,7 +215,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
 
     @Unique
     private static int aeallpattern$packDirection(int direction, int shift) {
-        return (Math.max(-1, Math.min(1, direction)) + 1) << shift;
+        return (Math.clamp(direction, -1, 1) + 1) << shift;
     }
 
     @Unique
@@ -222,7 +224,7 @@ public abstract class CraftConfirmMenuMixin implements CraftConfirmRoutingMenu {
     }
 
     @Unique
-    private static CraftingRoutePolicy forceFeasible(CraftingRoutePolicy policy) {
+    private static CraftingRoutePolicy aeallpattern$forceFeasible(CraftingRoutePolicy policy) {
         CraftingRoutePolicy value = policy == null ? CraftingRoutePolicy.DEFAULT : policy;
         return new CraftingRoutePolicy(
                 value.aggregatePriority(), true, value.pathPreference(),

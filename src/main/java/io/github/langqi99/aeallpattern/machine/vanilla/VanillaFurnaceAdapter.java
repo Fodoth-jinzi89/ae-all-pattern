@@ -7,12 +7,9 @@ import io.github.langqi99.aeallpattern.machine.ItemHandlerTransfer;
 import io.github.langqi99.aeallpattern.recipe.RecipeCatalog;
 import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
 import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+
+import java.util.*;
+
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -79,7 +76,7 @@ public final class VanillaFurnaceAdapter implements MachineAdapter {
                 }
                 String normalizedInput = normalize(input);
                 String normalizedOutput = normalize(output);
-                if (AEItemKey.of(input).equals(AEItemKey.of(output))
+                if (Objects.equals(AEItemKey.of(input), AEItemKey.of(output))
                         || !seen.add(List.of(normalizedInput, normalizedOutput))) {
                     filtered++;
                     continue;

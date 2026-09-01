@@ -32,8 +32,8 @@ public final class ReusableStockMatcher {
         int sink = actualOffset + actual.size();
         var flow = new LongCapacityFlow(sink + 1);
         var acceptedByRoute = new LinkedHashMap<ReusableStockRouteKey<K>, Set<K>>();
-        for (int i = 0; i < routes.size(); i++) {
-            var route = routes.get(i).getKey();
+        for (Map.Entry<ReusableStockRouteKey<K>, Long> reusableStockRouteKeyLongEntry : routes) {
+            var route = reusableStockRouteKeyLongEntry.getKey();
             var accepted = new LinkedHashSet<K>();
             var routeCandidates = candidates.apply(route);
             if (routeCandidates != null) {
@@ -120,6 +120,7 @@ public final class ReusableStockMatcher {
             return forward;
         }
 
+        @SuppressWarnings("StatementWithEmptyBody")
         private void maximize(int source, int sink) {
             while (buildLevels(source, sink)) {
                 next = new int[graph.size()];

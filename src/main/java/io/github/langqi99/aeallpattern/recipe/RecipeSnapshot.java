@@ -9,6 +9,7 @@ import net.minecraft.world.item.ItemStack;
 public final class RecipeSnapshot {
     private final ResourceLocation recipeId;
     private final List<ItemStack> inputs;
+    private final List<List<ItemStack>> inputAlternatives;
     private final ItemStack output;
     private final RecipeFingerprint fingerprint;
     private final int processingTicks;
@@ -28,12 +29,39 @@ public final class RecipeSnapshot {
             ItemStack output,
             RecipeFingerprint fingerprint,
             int processingTicks) {
+        this(recipeId, inputs.stream().map(List::of).toList(), output, fingerprint, processingTicks, true);
+    }
+
+    public static RecipeSnapshot withAlternatives(
+            ResourceLocation recipeId,
+            List<List<ItemStack>> inputAlternatives,
+            ItemStack output,
+            RecipeFingerprint fingerprint,
+            int processingTicks) {
+        return new RecipeSnapshot(recipeId, inputAlternatives, output, fingerprint, processingTicks, true);
+    }
+
+    private RecipeSnapshot(
+            ResourceLocation recipeId,
+            List<List<ItemStack>> inputAlternatives,
+            ItemStack output,
+            RecipeFingerprint fingerprint,
+            int processingTicks,
+            boolean ignored) {
         this.recipeId = Objects.requireNonNull(recipeId, "recipeId");
-        Objects.requireNonNull(inputs, "inputs");
-        if (inputs.isEmpty() || inputs.size() > 9) {
-            throw new IllegalArgumentException("recipe must have between 1 and 9 inputs");
+        Objects.requireNonNull(inputAlternatives, "inputAlternatives");
+        if (inputAlternatives.isEmpty() || inputAlternatives.size() > 81) {
+            throw new IllegalArgumentException("recipe must have between 1 and 81 inputs");
         }
-        this.inputs = inputs.stream().map(stack -> requireStack(stack, "input")).toList();
+        this.inputAlternatives = inputAlternatives.stream()
+                .map(alternatives -> {
+                    if (alternatives == null || alternatives.isEmpty() || alternatives.size() > 32) {
+                        throw new IllegalArgumentException("input must have between 1 and 32 alternatives");
+                    }
+                    return alternatives.stream().map(stack -> requireStack(stack, "input")).toList();
+                })
+                .toList();
+        this.inputs = this.inputAlternatives.stream().map(List::getFirst).toList();
         this.output = requireStack(output, "output");
         this.fingerprint = Objects.requireNonNull(fingerprint, "fingerprint");
         this.processingTicks = Math.max(1, processingTicks);
@@ -49,6 +77,12 @@ public final class RecipeSnapshot {
 
     public List<ItemStack> inputs() {
         return inputs.stream().map(ItemStack::copy).toList();
+    }
+
+    public List<List<ItemStack>> inputAlternatives() {
+        return inputAlternatives.stream()
+                .map(alternatives -> alternatives.stream().map(ItemStack::copy).toList())
+                .toList();
     }
 
     public ItemStack output() {

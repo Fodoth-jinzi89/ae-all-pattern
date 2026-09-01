@@ -11,6 +11,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.NotNull;
 
 /** One bounded page of a client JEI scan. No packet can contain the whole catalog. */
 public record GenerateAggregatePayload(
@@ -29,11 +30,13 @@ public record GenerateAggregatePayload(
 
     public GenerateAggregatePayload {
         recipes = List.copyOf(recipes);
-        int maxPages = (io.github.langqi99.aeallpattern.aggregate.AggregatePatternData.MAX_RECIPES
-                + AggregatePatternLibrary.PAGE_SIZE - 1) / AggregatePatternLibrary.PAGE_SIZE;
+        // Upload pages are split by an estimated byte budget on the client (protocol packet
+        // limit), so a page may hold far fewer than PAGE_SIZE recipes. Allow one page per
+        // recipe as the degenerate upper bound.
         if (machineTranslationKey == null || machineTranslationKey.isBlank()
                 || machineTranslationKey.length() > 256
-                || pageIndex < 0 || pageCount < 1 || pageCount > maxPages || pageIndex >= pageCount
+                || pageIndex < 0 || pageCount < 1 || pageCount > io.github.langqi99.aeallpattern.aggregate.AggregatePatternData.MAX_RECIPES
+                || pageIndex >= pageCount
                 || totalRecipeCount < 1
                 || totalRecipeCount > io.github.langqi99.aeallpattern.aggregate.AggregatePatternData.MAX_RECIPES
                 || recipes.isEmpty() || recipes.size() > AggregatePatternLibrary.PAGE_SIZE) {
@@ -42,7 +45,7 @@ public record GenerateAggregatePayload(
     }
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
+    public @NotNull Type<? extends CustomPacketPayload> type() {
         return TYPE;
     }
 

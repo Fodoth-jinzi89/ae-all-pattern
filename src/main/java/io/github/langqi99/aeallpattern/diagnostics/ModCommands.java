@@ -14,6 +14,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import java.util.Locale;
+import net.minecraft.core.BlockPos;
 
 public final class ModCommands {
     private ModCommands() {
@@ -41,14 +43,14 @@ public final class ModCommands {
                 : records.stream().filter(record -> record.ownerId().equals(source.getPlayer().getUUID())).count();
         source.sendSuccess(() -> Component.literal(
                 "AE All Pattern: bindings=" + visible + ", recipeGeneration=" + RecipeIndexService.generation()), false);
-        return (int) Math.min(Integer.MAX_VALUE, visible);
+        return (int) visible;
     }
 
     private static int perf(CommandSourceStack source) {
         PerformanceMetrics.Snapshot metrics = PerformanceMetrics.snapshot();
         double rebuildMillis = metrics.catalogRebuildNanos() / 1_000_000.0;
         source.sendSuccess(() -> Component.literal(String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "catalog rebuilds=%d time=%.2fms accepted=%d filtered=%d | provider refreshes=%d diff=%d | pushes accepted=%d rejected=%d | machine input=%d recovered=%d",
                 metrics.catalogRebuilds(), rebuildMillis, metrics.recipesAccepted(), metrics.recipesFiltered(),
                 metrics.providerRefreshes(), metrics.providerDiffSize(),
@@ -57,7 +59,7 @@ public final class ModCommands {
         return 1;
     }
 
-    private static int seedTestMaterials(CommandSourceStack source, net.minecraft.core.BlockPos linkerPos) {
+    private static int seedTestMaterials(CommandSourceStack source, BlockPos linkerPos) {
         if (!(source.getLevel().getBlockEntity(linkerPos) instanceof PatternLinkerBlockEntity linker)) {
             source.sendFailure(Component.literal("No All Pattern Linker at " + linkerPos.toShortString()));
             return 0;

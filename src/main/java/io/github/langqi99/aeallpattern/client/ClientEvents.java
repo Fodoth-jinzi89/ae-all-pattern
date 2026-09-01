@@ -14,6 +14,8 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import io.github.langqi99.aeallpattern.registry.ModMenus;
 import io.github.langqi99.aeallpattern.tianshu.TianshuRoutingScreen;
 import appeng.init.client.InitScreens;
@@ -28,15 +30,23 @@ public final class ClientEvents {
         NeoForge.EVENT_BUS.addListener(ClientEvents::renderBindings);
         NeoForge.EVENT_BUS.addListener(ClientEvents::onLogout);
         NeoForge.EVENT_BUS.addListener(ClientJeiAggregateScanner::onRightClickBlock);
+        NeoForge.EVENT_BUS.addListener(ClientJeiAggregateScanner::onClientTick);
     }
 
     public static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenus.AGGREGATE_PATTERN_CONFIG.get(), AggregatePatternConfigScreen::new);
+        event.register(ModMenus.AGGREGATE_PATTERN_SELECTION.get(), AggregatePatternSelectionScreen::new);
         InitScreens.register(
                 event,
                 ModMenus.TIANSHU_ROUTING.get(),
                 TianshuRoutingScreen::new,
                 "/screens/priority.json");
+    }
+
+    public static void registerConfigScreen(FMLClientSetupEvent event) {
+        if (ModList.get().isLoaded("cloth_config")) {
+            AeAllPatternConfigScreen.register();
+        }
     }
 
     private static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
@@ -139,8 +149,12 @@ public final class ClientEvents {
     }
 
     private static AABB blockBounds(Minecraft minecraft, BindingRenderEntry binding) {
-        var state = minecraft.level.getBlockState(binding.pos());
-        var shape = state.getShape(minecraft.level, binding.pos());
+        var level = minecraft.level;
+        if (level == null) {
+            return new AABB(binding.pos());
+        }
+        var state = level.getBlockState(binding.pos());
+        var shape = state.getShape(level, binding.pos());
         return (shape.isEmpty() ? new AABB(binding.pos()) : shape.bounds().move(binding.pos()));
     }
 }

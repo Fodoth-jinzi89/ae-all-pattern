@@ -2,6 +2,7 @@ package io.github.langqi99.aeallpattern.network;
 
 import io.github.langqi99.aeallpattern.aggregate.AggregatePatternLibrary;
 import io.github.langqi99.aeallpattern.aggregate.AggregateRecipe;
+import io.github.langqi99.aeallpattern.machine.MachineAdapterRegistry;
 import io.github.langqi99.aeallpattern.registry.ModDataComponents;
 import io.github.langqi99.aeallpattern.registry.ModItems;
 import java.util.ArrayList;
@@ -9,6 +10,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Collections;
+import java.util.Objects;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,8 +22,9 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 
 /** Validates and assembles bounded JEI scan pages before updating the server library. */
+@SuppressWarnings("deprecation")
 public final class AggregateGenerationService {
-    private static final long UPLOAD_TIMEOUT_TICKS = 20L * 30L;
+    private static final long UPLOAD_TIMEOUT_TICKS = 20L * 120L;
     private static final Map<UploadKey, Upload> UPLOADS = new HashMap<>();
 
     private AggregateGenerationService() {
@@ -45,7 +51,7 @@ public final class AggregateGenerationService {
         if (recipes.size() != payload.totalRecipeCount()) {
             return;
         }
-        var library = AggregatePatternLibrary.get(player.getServer());
+        var library = AggregatePatternLibrary.get(Objects.requireNonNull(player.getServer()));
         var ref = library.put(
                 player.getServer(), payload.catalystId(), payload.machineTranslationKey(), recipes);
         AggregateMetadataSyncService.sendToOnlinePlayers(player.getServer());
@@ -64,14 +70,25 @@ public final class AggregateGenerationService {
     }
 
     private static boolean validTarget(GenerateAggregatePayload payload, ServerPlayer player) {
+        // The client scan runs across many ticks, so the player legitimately walks away from
+        // the machine while it completes. Enforce the machine identity instead of proximity:
+        // the clicked block must still be the same block, and the player must still hold the
+        // generator item.
         if (!holdsGenerator(player)
-                || player.distanceToSqr(payload.machinePos().getCenter()) > 64.0
                 || !player.level().hasChunkAt(payload.machinePos())) {
             return false;
         }
         var block = player.level().getBlockState(payload.machinePos()).getBlock();
-        return BuiltInRegistries.BLOCK.getKey(block).equals(payload.catalystId())
-                && block.getDescriptionId().equals(payload.machineTranslationKey());
+        if (!BuiltInRegistries.BLOCK.getKey(block).equals(payload.catalystId())
+                || !block.getDescriptionId().equals(payload.machineTranslationKey())) {
+            return false;
+        }
+        // Exact server-side adapters own their recipe catalog. Do not let a client
+        // JEI scan create a second, category-wide aggregate for the same machine.
+        var target = player.level().getBlockEntity(payload.machinePos());
+        // Blocks without block entities (currently the crafting table) use native AE
+        // crafting patterns and have no server-side machine adapter to validate.
+        return target == null || MachineAdapterRegistry.find(player.serverLevel(), target).isEmpty();
     }
 
     private static boolean holdsGenerator(ServerPlayer player) {
@@ -83,8 +100,8 @@ public final class AggregateGenerationService {
     }
 
     private static final class Upload {
-        private final net.minecraft.core.BlockPos machinePos;
-        private final net.minecraft.resources.ResourceLocation catalystId;
+        private final BlockPos machinePos;
+        private final ResourceLocation catalystId;
         private final String machineKey;
         private final int pageCount;
         private final int totalRecipeCount;
@@ -97,7 +114,7 @@ public final class AggregateGenerationService {
             machineKey = first.machineTranslationKey();
             pageCount = first.pageCount();
             totalRecipeCount = first.totalRecipeCount();
-            pages = new ArrayList<>(java.util.Collections.nCopies(pageCount, null));
+            pages = new ArrayList<>(Collections.nCopies(pageCount, null));
             lastUpdateTick = now;
         }
 
@@ -120,7 +137,7 @@ public final class AggregateGenerationService {
         }
 
         private boolean complete() {
-            return pages.stream().allMatch(java.util.Objects::nonNull);
+            return pages.stream().allMatch(Objects::nonNull);
         }
 
         private List<AggregateRecipe> flatten() {

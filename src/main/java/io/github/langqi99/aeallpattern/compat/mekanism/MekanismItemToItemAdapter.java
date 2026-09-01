@@ -7,11 +7,8 @@ import io.github.langqi99.aeallpattern.machine.ItemHandlerTransfer;
 import io.github.langqi99.aeallpattern.recipe.RecipeCatalog;
 import io.github.langqi99.aeallpattern.recipe.RecipeFingerprint;
 import io.github.langqi99.aeallpattern.recipe.RecipeSnapshot;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+
+import java.util.*;
 import java.util.function.Supplier;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
@@ -36,6 +33,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
     private final ResourceLocation id;
     private final Supplier<RecipeType<ItemStackToItemStackRecipe>> recipeType;
     private final boolean vanillaSmelting;
+    private final String machineNamespace;
     private final String singleMachinePath;
     private final String factorySuffix;
 
@@ -47,6 +45,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
         this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
         this.recipeType = recipeType;
         this.vanillaSmelting = false;
+        this.machineNamespace = "mekanism";
         this.singleMachinePath = singleMachinePath;
         this.factorySuffix = factorySuffix;
     }
@@ -55,6 +54,21 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
         this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
         this.recipeType = null;
         this.vanillaSmelting = true;
+        this.machineNamespace = "mekanism";
+        this.singleMachinePath = singleMachinePath;
+        this.factorySuffix = factorySuffix;
+    }
+
+    MekanismItemToItemAdapter(
+            String idPath,
+            Supplier<RecipeType<ItemStackToItemStackRecipe>> recipeType,
+            String machineNamespace,
+            String singleMachinePath,
+            String factorySuffix) {
+        this.id = ResourceLocation.fromNamespaceAndPath("mekanism", idPath);
+        this.recipeType = recipeType;
+        this.vanillaSmelting = false;
+        this.machineNamespace = machineNamespace;
         this.singleMachinePath = singleMachinePath;
         this.factorySuffix = factorySuffix;
     }
@@ -72,7 +86,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
     @Override
     public boolean supports(ServerLevel level, BlockEntity target) {
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(target.getBlockState().getBlock());
-        return blockId.getNamespace().equals("mekanism")
+        return blockId.getNamespace().equals(machineNamespace)
                 && (blockId.getPath().equals(singleMachinePath) || blockId.getPath().endsWith("_" + factorySuffix));
     }
 
@@ -101,7 +115,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
                     break;
                 }
                 long needed = holder.value().getInput().getNeededAmount(representation);
-                if (needed < 1 || needed > representation.getMaxStackSize() || needed > Integer.MAX_VALUE) {
+                if (needed < 1 || needed > representation.getMaxStackSize()) {
                     filtered++;
                     continue;
                 }
@@ -113,7 +127,7 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
                 }
                 String normalizedInput = normalize(input);
                 String normalizedOutput = normalize(output);
-                if (AEItemKey.of(input).equals(AEItemKey.of(output))
+                if (Objects.equals(AEItemKey.of(input), AEItemKey.of(output))
                         || !seen.add(List.of(normalizedInput, normalizedOutput))) {
                     filtered++;
                     continue;
@@ -235,7 +249,8 @@ final class MekanismItemToItemAdapter implements MachineAdapter {
             if (remainder.isEmpty()) {
                 break;
             }
-            if (isSlotType(slot, "mekanism.common.inventory.slot.InputInventorySlot")) {
+            if (isSlotType(slot, "mekanism.common.inventory.slot.InputInventorySlot")
+                    || !isSlotType(slot, "mekanism.common.inventory.slot.OutputInventorySlot")) {
                 remainder = slot.insertItem(remainder, action, AutomationType.MANUAL);
             }
         }

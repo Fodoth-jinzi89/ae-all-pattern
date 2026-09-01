@@ -8,8 +8,10 @@ import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.NotNull;
 
 /** Fixed-position recipe-qualification switch shown beneath mandatory feasibility. */
 public final class RoutingQualificationButton extends AbstractWidget implements ITooltip {
@@ -43,6 +45,7 @@ public final class RoutingQualificationButton extends AbstractWidget implements 
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public void onClick(double mouseX, double mouseY) {
         change.accept(!enabled.get());
     }
@@ -68,7 +71,7 @@ public final class RoutingQualificationButton extends AbstractWidget implements 
     }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput output) {
         defaultButtonNarrationText(output);
     }
 }

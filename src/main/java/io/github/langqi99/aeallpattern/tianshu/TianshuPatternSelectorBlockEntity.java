@@ -2,15 +2,12 @@ package io.github.langqi99.aeallpattern.tianshu;
 
 import appeng.api.networking.IGrid;
 import appeng.api.networking.IManagedGridNode;
-import appeng.api.orientation.BlockOrientation;
 import appeng.api.util.AECableType;
 import appeng.blockentity.grid.AENetworkedBlockEntity;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.CraftingRoutePolicy;
 import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.SecondaryOutputPatternSource;
 import io.github.langqi99.aeallpattern.registry.ModBlockEntities;
 import io.github.langqi99.aeallpattern.registry.ModBlocks;
-import java.util.EnumSet;
-import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -23,6 +20,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.NotNull;
 
 /** Networked route-planning controller. Crafting execution remains the responsibility of normal AE CPUs. */
 public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEntity implements MenuProvider {
@@ -48,11 +46,6 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
         return AECableType.DENSE_SMART;
     }
 
-    @Override
-    public Set<Direction> getGridConnectableSides(BlockOrientation orientation) {
-        return EnumSet.allOf(Direction.class);
-    }
-
     public IGrid getGrid() {
         return getMainNode().getGrid();
     }
@@ -62,12 +55,12 @@ public final class TianshuPatternSelectorBlockEntity extends AENetworkedBlockEnt
     }
 
     @Override
-    public Component getDisplayName() {
+    public @NotNull Component getDisplayName() {
         return Component.translatable("block.aeallpattern.tianshu_pattern_selector");
     }
 
     @Override
-    public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) {
+    public AbstractContainerMenu createMenu(int id, @NotNull Inventory inventory, @NotNull Player player) {
         return new TianshuRoutingMenu(id, inventory, this);
     }
 

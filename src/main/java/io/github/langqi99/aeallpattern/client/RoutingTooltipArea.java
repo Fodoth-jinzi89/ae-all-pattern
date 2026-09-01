@@ -5,8 +5,10 @@ import java.util.List;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.NotNull;
 
 /** Invisible hover area for explanatory text on non-interactive policy rows. */
 public final class RoutingTooltipArea extends AbstractWidget implements ITooltip {
@@ -20,7 +22,7 @@ public final class RoutingTooltipArea extends AbstractWidget implements ITooltip
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    protected void renderWidget(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     @Override
@@ -39,6 +41,6 @@ public final class RoutingTooltipArea extends AbstractWidget implements ITooltip
     }
 
     @Override
-    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput output) {
     }
 }

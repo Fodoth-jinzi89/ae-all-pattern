@@ -59,6 +59,7 @@ import io.github.langqi99.aeallpattern.internal.routing.ae2.crafting.RoutingPatt
  * met from stock or from a craft whose own inputs were met. Shortfalls always surface in
  * {@link CraftPlan#missing()}.
  */
+@SuppressWarnings("DataFlowIssue")
 public final class CraftPlannerV2<K> {
 
     /**
@@ -305,18 +306,17 @@ public final class CraftPlannerV2<K> {
             long amount,
             int visitCap,
             int searchWorkBudget,
-            int reachableWork,
+            int replayCharge,
             CraftingRoutePolicy routePolicy) {
         long started = System.nanoTime();
         DiagnosticsCollector diagnostics =
-                new DiagnosticsCollector(reachableWork, searchWorkBudget);
+                new DiagnosticsCollector(replayCharge, searchWorkBudget);
         if (amount <= 0) {
             CraftPlan<K> empty = new CraftPlan<>(
                     true, true, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), 0, false);
             return new PlanningResult<>(empty, diagnostics.finish(started, null));
         }
         SearchBudget budget = new SearchBudget(searchWorkBudget, diagnostics);
-        int replayCharge = reachableWork;
         Map<List<K>, PreparedGraph<K>> preparedByOrientation = new HashMap<>();
         PlanVariant<K> firstVariant =
                 new PlanVariant<>(List.of(), Map.of(), 0, 0L);
@@ -440,14 +440,13 @@ public final class CraftPlannerV2<K> {
     private static int scaledSearchWorkBudget(int work) {
         int log = 32 - Integer.numberOfLeadingZeros(Math.max(1, work));
         long scaled = (long) work * (log + 4L);
-        return (int) Math.min(
-                DEFAULT_SEARCH_WORK_BUDGET,
-                Math.max(MIN_SEARCH_WORK_BUDGET, scaled));
+        return Math.clamp(scaled, MIN_SEARCH_WORK_BUDGET,
+                DEFAULT_SEARCH_WORK_BUDGET);
     }
 
     private static int fallbackWorkBudget(int reachableWork) {
         long scaled = (long) Math.max(1, reachableWork) * FALLBACK_WORK_PER_REACHABLE_UNIT;
-        return (int) Math.min(MAX_FALLBACK_WORK_BUDGET, Math.max(64L, scaled));
+        return (int) Math.clamp(scaled, 64L, MAX_FALLBACK_WORK_BUDGET);
     }
 
     static <K> int reachableWorkEstimate(CraftGraph<K> graph, K target) {
@@ -706,12 +705,9 @@ public final class CraftPlannerV2<K> {
         feedbackSeedConverters.forEach(
                 (pattern, values) -> frozenConverters.put(pattern, List.copyOf(values)));
 
-        IdentityHashMap<CraftPattern<K>, Long> frozenScores = new IdentityHashMap<>();
-        frozenScores.putAll(capacityScoreByPattern);
-        IdentityHashMap<CraftPattern<K>, Map<K, Long>> frozenRaw = new IdentityHashMap<>();
-        frozenRaw.putAll(directRawConsumablesByPattern);
-        IdentityHashMap<CraftPattern<K>, Integer> frozenFootprints = new IdentityHashMap<>();
-        frozenFootprints.putAll(materialFootprintByPattern);
+        IdentityHashMap<CraftPattern<K>, Long> frozenScores = new IdentityHashMap<>(capacityScoreByPattern);
+        IdentityHashMap<CraftPattern<K>, Map<K, Long>> frozenRaw = new IdentityHashMap<>(directRawConsumablesByPattern);
+        IdentityHashMap<CraftPattern<K>, Integer> frozenFootprints = new IdentityHashMap<>(materialFootprintByPattern);
 
         int patternCount = 0;
         int inputCount = 0;
@@ -1666,8 +1662,7 @@ public final class CraftPlannerV2<K> {
 
             // Direct stock and dynamic surplus/byproduct credit belong to this concrete intermediate,
             // not merely to its production tree. Keep its identity when it is used by a parent.
-            if (graph.stock(key) > 0 || dynamicPoolKeys.contains(key)
-                    || !allEquivalent || common == null) {
+            if (graph.stock(key) > 0 || dynamicPoolKeys.contains(key) || !allEquivalent) {
                 footprintByKey.put(key, interner.intern(new MaterialLeaf(key)));
             } else {
                 footprintByKey.put(key, common);
@@ -2103,7 +2098,7 @@ public final class CraftPlannerV2<K> {
             long p = capRemainingVia(r, need);
             Long cap = capUnits.get(r);
             if (cap != null) {
-                p = Math.min(p, Math.max(0L, cap - allocatedUnits.getOrDefault(r, 0L)));
+                p = Math.clamp(cap - allocatedUnits.getOrDefault(r, 0L), 0L, p);
             }
             if (p <= 0) {
                 continue;
@@ -2118,7 +2113,7 @@ public final class CraftPlannerV2<K> {
         // Leftover nobody had capacity for: push demand down the primary recipe; the deficit surfaces
         // at the raw leaves (same optimistic behaviour as AE2's simulation).
         if (d > 0) {
-            CraftPattern<K> r0 = ps.get(0);
+            CraftPattern<K> r0 = ps.getFirst();
             long t = Sat.ceilDiv(d, r0.outputAmount());
             allocatedUnits.merge(r0, d, Sat::add);
             fireLinear(x, r0, t, d, need, bp, returnedSeedReserve, fired);
@@ -2432,7 +2427,7 @@ public final class CraftPlannerV2<K> {
         // A single recipe needs no alternate search, but its descendants still resolve their own
         // contention normally. It consumes resolution work above, never alternative-search work.
         if (ps.size() == 1) {
-            long unmet = fire(x, ps.get(0), d, !commitFailure);
+            long unmet = fire(x, ps.getFirst(), d, !commitFailure);
             if (!commitFailure && unmet > 0
                     && !searchBudget.exhausted() && !diagnostics.resolutionExhausted()) {
                 failedSpeculativeSearches.add(failureKey);
@@ -2445,7 +2440,7 @@ public final class CraftPlannerV2<K> {
         if (distinctBranches.size() == 1) {
             // There is no materially different alternative to discover. Commit the representative
             // once instead of speculatively expanding it, rolling it back, and expanding it again.
-            long unmet = fire(x, distinctBranches.get(0), d, !commitFailure);
+            long unmet = fire(x, distinctBranches.getFirst(), d, !commitFailure);
             if (!commitFailure && unmet > 0
                     && !searchBudget.exhausted() && !diagnostics.resolutionExhausted()) {
                 failedSpeculativeSearches.add(failureKey);
@@ -2789,7 +2784,7 @@ public final class CraftPlannerV2<K> {
                 }
             }
             List<CraftPattern<K>> psy = patternsByOutput.getOrDefault(y, List.of());
-            CraftPattern<K> r = psy.size() == 1 ? psy.get(0) : capacityOrder(y).get(0);
+            CraftPattern<K> r = psy.size() == 1 ? psy.getFirst() : capacityOrder(y).getFirst();
             if (processed < Integer.MAX_VALUE) {
                 processed++;
             }
@@ -2820,8 +2815,8 @@ public final class CraftPlannerV2<K> {
     }
 
     private long commitBestEffort(List<CraftPattern<K>> ps, K x, long d) {
-        recordRouteDecision(x, ps.get(0), ps);
-        return fire(x, ps.get(0), d, false);
+        recordRouteDecision(x, ps.getFirst(), ps);
+        return fire(x, ps.getFirst(), d, false);
     }
 
     /**
@@ -3330,7 +3325,7 @@ public final class CraftPlannerV2<K> {
 
         List<CraftPattern<K>> patterns = patternsByOutput.getOrDefault(key, List.of());
         if (patterns.isEmpty()) return;
-        CraftPattern<K> preferred = capacityOrder(key).get(0);
+        CraftPattern<K> preferred = capacityOrder(key).getFirst();
         List<FeedbackSeedBootstrap<K>> bootstraps = feedbackSeedBootstraps.get(preferred);
         if (bootstraps == null || bootstraps.isEmpty()) return;
 
@@ -3534,7 +3529,7 @@ public final class CraftPlannerV2<K> {
         int oldSize = routeDecisions.size();
         trail.push(() -> {
             while (routeDecisions.size() > oldSize) {
-                routeDecisions.remove(routeDecisions.size() - 1);
+                routeDecisions.removeLast();
             }
         });
         routeDecisions.add(new RouteDecision<>(key, selected, List.copyOf(candidates)));
@@ -3565,7 +3560,7 @@ public final class CraftPlannerV2<K> {
             List<CraftPattern<K>> defaultOrder = capacityOrderByOutput.getOrDefault(
                     decision.key(), patternsByOutput.getOrDefault(decision.key(), List.of()));
             CraftPattern<K> defaultPattern =
-                    defaultOrder.isEmpty() ? decision.selected() : defaultOrder.get(0);
+                    defaultOrder.isEmpty() ? decision.selected() : defaultOrder.getFirst();
             for (int i = selected + 1; i < candidates.size(); i++) {
                 if (alternatives.size() >= limit) {
                     truncated = true;
@@ -3648,72 +3643,65 @@ public final class CraftPlannerV2<K> {
         }
     }
 
-    /** Immutable output of graph discovery/cycle cutting for one priority-root orientation. */
-    private static final class PreparedGraph<K> {
-        private final CraftGraph<K> graph;
-        private final List<K> order;
-        private final Set<K> items;
-        private final Set<K> cutOutputs;
-        private final Map<K, List<CraftPattern<K>>> patternsByOutput;
-        private final Map<CraftPattern<K>, Set<K>> suppressedPositiveFeedbackOutputs;
-        private final Map<CraftPattern<K>, Map<K, Long>> linearContainerBootstrapReserves;
-        private final Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedBootstraps;
-        private final Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedConverters;
-        private final List<ConservativeFeedbackAnalysis.Component<K>> conservativeFeedbackComponents;
-        private final boolean seedOrdered;
-        private final Set<K> seedOrderedDependencyCone;
-        private final Map<K, Long> capacity;
-        private final Map<CraftPattern<K>, Long> capacityScoreByPattern;
-        private final Map<K, List<CraftPattern<K>>> capacityOrderByOutput;
-        private final Map<CraftPattern<K>, Map<K, Long>> directRawConsumablesByPattern;
-        private final Map<CraftPattern<K>, Integer> materialFootprintByPattern;
-        private final int patternCount;
-        private final int inputCount;
-        private final int contendedOutputCount;
-
-        private PreparedGraph(
-                CraftGraph<K> graph,
-                List<K> order,
-                Set<K> items,
-                Set<K> cutOutputs,
-                Map<K, List<CraftPattern<K>>> patternsByOutput,
-                Map<CraftPattern<K>, Set<K>> suppressedPositiveFeedbackOutputs,
-                Map<CraftPattern<K>, Map<K, Long>> linearContainerBootstrapReserves,
-                Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedBootstraps,
-                Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedConverters,
-                List<ConservativeFeedbackAnalysis.Component<K>> conservativeFeedbackComponents,
-                boolean seedOrdered,
-                Set<K> seedOrderedDependencyCone,
-                Map<K, Long> capacity,
-                Map<CraftPattern<K>, Long> capacityScoreByPattern,
-                Map<K, List<CraftPattern<K>>> capacityOrderByOutput,
-                Map<CraftPattern<K>, Map<K, Long>> directRawConsumablesByPattern,
-                Map<CraftPattern<K>, Integer> materialFootprintByPattern,
-                int patternCount,
-                int inputCount,
-                int contendedOutputCount) {
-            this.graph = graph;
-            this.order = order;
-            this.items = items;
-            this.cutOutputs = cutOutputs;
-            this.patternsByOutput = patternsByOutput;
-            this.suppressedPositiveFeedbackOutputs = suppressedPositiveFeedbackOutputs;
-            this.linearContainerBootstrapReserves = linearContainerBootstrapReserves;
-            this.feedbackSeedBootstraps = feedbackSeedBootstraps;
-            this.feedbackSeedConverters = feedbackSeedConverters;
-            this.conservativeFeedbackComponents = List.copyOf(conservativeFeedbackComponents);
-            this.seedOrdered = seedOrdered;
-            this.seedOrderedDependencyCone = seedOrderedDependencyCone;
-            this.capacity = capacity;
-            this.capacityScoreByPattern = capacityScoreByPattern;
-            this.capacityOrderByOutput = capacityOrderByOutput;
-            this.directRawConsumablesByPattern = directRawConsumablesByPattern;
-            this.materialFootprintByPattern = materialFootprintByPattern;
-            this.patternCount = patternCount;
-            this.inputCount = inputCount;
-            this.contendedOutputCount = contendedOutputCount;
+    /**
+     * Immutable output of graph discovery/cycle cutting for one priority-root orientation.
+     */
+        private record PreparedGraph<K>(CraftGraph<K> graph, List<K> order, Set<K> items, Set<K> cutOutputs,
+                                        Map<K, List<CraftPattern<K>>> patternsByOutput,
+                                        Map<CraftPattern<K>, Set<K>> suppressedPositiveFeedbackOutputs,
+                                        Map<CraftPattern<K>, Map<K, Long>> linearContainerBootstrapReserves,
+                                        Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedBootstraps,
+                                        Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedConverters,
+                                        List<ConservativeFeedbackAnalysis.Component<K>> conservativeFeedbackComponents,
+                                        boolean seedOrdered, Set<K> seedOrderedDependencyCone, Map<K, Long> capacity,
+                                        Map<CraftPattern<K>, Long> capacityScoreByPattern,
+                                        Map<K, List<CraftPattern<K>>> capacityOrderByOutput,
+                                        Map<CraftPattern<K>, Map<K, Long>> directRawConsumablesByPattern,
+                                        Map<CraftPattern<K>, Integer> materialFootprintByPattern, int patternCount,
+                                        int inputCount, int contendedOutputCount) {
+            private PreparedGraph(
+                    CraftGraph<K> graph,
+                    List<K> order,
+                    Set<K> items,
+                    Set<K> cutOutputs,
+                    Map<K, List<CraftPattern<K>>> patternsByOutput,
+                    Map<CraftPattern<K>, Set<K>> suppressedPositiveFeedbackOutputs,
+                    Map<CraftPattern<K>, Map<K, Long>> linearContainerBootstrapReserves,
+                    Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedBootstraps,
+                    Map<CraftPattern<K>, List<FeedbackSeedBootstrap<K>>> feedbackSeedConverters,
+                    List<ConservativeFeedbackAnalysis.Component<K>> conservativeFeedbackComponents,
+                    boolean seedOrdered,
+                    Set<K> seedOrderedDependencyCone,
+                    Map<K, Long> capacity,
+                    Map<CraftPattern<K>, Long> capacityScoreByPattern,
+                    Map<K, List<CraftPattern<K>>> capacityOrderByOutput,
+                    Map<CraftPattern<K>, Map<K, Long>> directRawConsumablesByPattern,
+                    Map<CraftPattern<K>, Integer> materialFootprintByPattern,
+                    int patternCount,
+                    int inputCount,
+                    int contendedOutputCount) {
+                this.graph = graph;
+                this.order = order;
+                this.items = items;
+                this.cutOutputs = cutOutputs;
+                this.patternsByOutput = patternsByOutput;
+                this.suppressedPositiveFeedbackOutputs = suppressedPositiveFeedbackOutputs;
+                this.linearContainerBootstrapReserves = linearContainerBootstrapReserves;
+                this.feedbackSeedBootstraps = feedbackSeedBootstraps;
+                this.feedbackSeedConverters = feedbackSeedConverters;
+                this.conservativeFeedbackComponents = List.copyOf(conservativeFeedbackComponents);
+                this.seedOrdered = seedOrdered;
+                this.seedOrderedDependencyCone = seedOrderedDependencyCone;
+                this.capacity = capacity;
+                this.capacityScoreByPattern = capacityScoreByPattern;
+                this.capacityOrderByOutput = capacityOrderByOutput;
+                this.directRawConsumablesByPattern = directRawConsumablesByPattern;
+                this.materialFootprintByPattern = materialFootprintByPattern;
+                this.patternCount = patternCount;
+                this.inputCount = inputCount;
+                this.contendedOutputCount = contendedOutputCount;
+            }
         }
-    }
 
     /** Mutable counters shared by all route replays; converted to a record without extra graph work. */
     private static final class DiagnosticsCollector {

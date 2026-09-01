@@ -14,11 +14,11 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public final class ModBlockEntities {
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, AeAllPattern.MOD_ID);
-
+    @SuppressWarnings("ConstantConditions")
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PatternLinkerBlockEntity>> PATTERN_LINKER =
             BLOCK_ENTITIES.register("pattern_linker", () -> BlockEntityType.Builder.of(
                     PatternLinkerBlockEntity::new, ModBlocks.PATTERN_LINKER.get()).build(null));
-
+    @SuppressWarnings("ConstantConditions")
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TianshuPatternSelectorBlockEntity>>
             TIANSHU_PATTERN_SELECTOR = BLOCK_ENTITIES.register(
                     "tianshu_pattern_selector",

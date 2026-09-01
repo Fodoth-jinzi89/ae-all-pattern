@@ -22,6 +22,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * Server-owned, paged backing store for aggregate patterns. Items only retain a UUID.
@@ -97,7 +98,7 @@ public final class AggregatePatternLibrary extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    public @NotNull CompoundTag save(CompoundTag tag, HolderLookup.@NotNull Provider registries) {
         ListTag list = new ListTag();
         entries.values().stream().sorted(Comparator.comparing(Entry::libraryId)).forEach(entry -> {
             CompoundTag raw = new CompoundTag();
@@ -190,7 +191,7 @@ public final class AggregatePatternLibrary extends SavedData {
         }
 
         @Override
-        public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        public @NotNull CompoundTag save(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider registries) {
             ListTag recipeTags = new ListTag();
             for (AggregateRecipe recipe : recipes) {
                 CompoundTag raw = new CompoundTag();
@@ -286,7 +287,7 @@ public final class AggregatePatternLibrary extends SavedData {
                 Optional<ResourceLocation> itemTag = slotTag.contains("ItemTag", Tag.TAG_STRING)
                         ? Optional.of(ResourceLocation.parse(slotTag.getString("ItemTag")))
                         : Optional.empty();
-                slots.add(new AggregateInputSlot(alternatives, itemTag));
+                slots.add(AggregateInputSlot.fromSavedData(alternatives, itemTag));
             }
             return List.copyOf(slots);
         }
